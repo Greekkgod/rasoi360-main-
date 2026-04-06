@@ -99,4 +99,16 @@ export const updateKotStatus = (id: number, status: string) =>
 // --- Stats ---
 export const fetchDashboardStats = () => api.get<DashboardStats>('/stats/dashboard').then(r => r.data);
 
+// --- Payments ---
+export interface Payment {
+  id: number;
+  order_id: number;
+  amount: number;
+  method: string;
+  status: string;
+}
+
+export const createPayment = (data: { order_id: number; amount: number; method: string }) =>
+  api.post<Payment>('/payments/', data).then(r => r.data);
+
 export default api;

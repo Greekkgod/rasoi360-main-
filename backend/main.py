@@ -1,7 +1,7 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routers import menu, tables, orders, websockets, kots, stats
+from routers import menu, tables, orders, websockets, kots, stats, payments
 from database import engine
 from models import Base
 
@@ -27,6 +27,7 @@ app.include_router(tables.router)
 app.include_router(orders.router)
 app.include_router(kots.router)
 app.include_router(stats.router)
+app.include_router(payments.router)
 app.include_router(websockets.router)
 
 @app.get("/")

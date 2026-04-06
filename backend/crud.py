@@ -288,3 +288,28 @@ async def get_dashboard_stats(db: AsyncSession):
         "preparing_kots": kot_counts["preparing"],
         "ready_kots": kot_counts["ready"],
     }
+
+# --- Payments ---
+async def create_payment(db: AsyncSession, payment: schemas.PaymentCreate):
+    # Create Payment record
+    db_payment = models.Payment(
+        order_id=payment.order_id,
+        amount=payment.amount,
+        method=payment.method,
+        status="Completed"
+    )
+    db.add(db_payment)
+
+    # Mark order as paid
+    await update_order_status(db, payment.order_id, "paid")
+
+    # Free up the table
+    order_stmt = select(models.Order).where(models.Order.id == payment.order_id)
+    order_result = await db.execute(order_stmt)
+    db_order = order_result.scalar_one_or_none()
+    if db_order:
+        await update_table_status(db, db_order.table_id, "Available")
+
+    await db.commit()
+    await db.refresh(db_payment)
+    return db_payment

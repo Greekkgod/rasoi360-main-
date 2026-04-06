@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, Plus, MoreVertical, CheckSquare, Square, Zap, X, Loader2 } from 'lucide-react';
+import { Search, Plus, CheckSquare, Square, Zap, X, Loader2 } from 'lucide-react';
 import { fetchMenu, createMenuItem, createCategory, updateMenuItem, deleteMenuItem, type Category, type MenuItem } from '@/lib/api';
 
 export default function MenuEditor() {

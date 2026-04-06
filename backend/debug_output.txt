@@ -1,0 +1,18 @@
+orders: ['id', 'table_id', 'user_id', 'status', 'total_amount', 'tax_amount']
+payments: ['id', 'order_id', 'amount', 'method', 'status']
+kots: ['id', 'order_id', 'station_id', 'status', 'created_at']
+kot_items: ['id', 'kot_id', 'menu_item_id', 'quantity', 'special_instructions']
+categories: ['id', 'name', 'description']
+menu_items: ['id', 'category_id', 'station_id', 'name', 'price', 'is_veg', 'is_available', 'image_url', 'cost_price']
+restaurant_tables: ['id', 'table_number', 'status']
+kitchen_stations: ['id', 'name', 'is_active']
+users: ['id', 'full_name', 'phone_number', 'password_hash', 'role_id']
+roles: ['id', 'name']
+inventory_items: ['id', 'name', 'category', 'unit', 'current_stock', 'min_stock', 'cost_per_unit', 'supplier', 'last_restocked', 'created_at']
+inventory_logs: ['id', 'item_id', 'change_type', 'quantity_change', 'note', 'created_at']
+aggregator_configs: ['id', 'platform', 'is_active', 'api_key', 'restaurant_id', 'commission_rate', 'auto_accept', 'webhook_secret']
+
+ORM orders query FAILED: OperationalError: (sqlite3.OperationalError) no such column: orders.created_at
+[SQL: SELECT orders.id, orders.table_id, orders.user_id, orders.status, orders.total_amount, orders.tax_amount, orders.created_at, orders.source, orders.external_order_id, orders.customer_name, orders.customer_phone 
+FROM orders ORDER BY orders.id DESC]
+(Background on this error at: https://sqlalche.me/e/20/e3q8)

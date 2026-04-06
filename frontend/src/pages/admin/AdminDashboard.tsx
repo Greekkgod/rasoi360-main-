@@ -1,26 +1,320 @@
 import { useState, useEffect } from 'react';
-import { 
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
-  PieChart, Pie, Cell, BarChart, Bar
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+  PieChart, Pie, Cell
 } from 'recharts';
-import { AlertCircle, TrendingUp, RefreshCw, ChefHat, ShoppingBag, Armchair, IndianRupee } from 'lucide-react';
-import { fetchDashboardStats, fetchOrders, type DashboardStats } from '@/lib/api';
+import {
+  AlertCircle, TrendingUp, RefreshCw, ChefHat,
+  ShoppingBag, Armchair, IndianRupee, CreditCard, Banknote, Smartphone, X, CheckCircle2, Loader2
+} from 'lucide-react';
+import { fetchDashboardStats, fetchOrders, createPayment, type DashboardStats } from '@/lib/api';
+
+// -----------------------------------------------------------------------------
+// 1. Types & Constants
+// -----------------------------------------------------------------------------
+
+export interface Order {
+  id: string | number;
+  table_id: string | number;
+  status: 'kitchen' | 'served' | 'paid' | 'pending' | string;
+  total_amount: number;
+  tax_amount: number;
+}
+
+const KOT_COLORS = ['#3b82f6', '#f97316', '#22c55e'];
+
+const STATUS_THEME: Record<string, { card: string; badgeBg: string; badgeText: string }> = {
+  kitchen: { card: 'bg-orange-50 border-orange-100', badgeBg: 'bg-orange-100', badgeText: 'text-orange-700' },
+  served: { card: 'bg-green-50 border-green-100', badgeBg: 'bg-green-100', badgeText: 'text-green-700' },
+  paid: { card: 'bg-blue-50 border-blue-100', badgeBg: 'bg-blue-100', badgeText: 'text-blue-700' },
+  default: { card: 'bg-stone-50 border-stone-100', badgeBg: 'bg-stone-100', badgeText: 'text-stone-700' },
+};
+
+const PAYMENT_METHODS = [
+  { id: 'cash', label: 'Cash', icon: Banknote, color: 'emerald', gradient: 'from-emerald-500 to-emerald-600' },
+  { id: 'upi', label: 'UPI', icon: Smartphone, color: 'violet', gradient: 'from-violet-500 to-violet-600' },
+  { id: 'card', label: 'Card', icon: CreditCard, color: 'blue', gradient: 'from-blue-500 to-blue-600' },
+];
+
+// -----------------------------------------------------------------------------
+// 2. Sub-Components
+// -----------------------------------------------------------------------------
+
+const StatCard = ({ title, value, subtext, icon: Icon, colorClass, isSpecial = false }: any) => {
+  if (isSpecial) {
+    return (
+      <div className="bg-orange-500 p-6 rounded-2xl shadow-md shadow-orange-500/20 text-white flex flex-col justify-center relative overflow-hidden">
+        <div className="relative z-10">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
+              <Icon size={20} className="text-white" />
+            </div>
+          </div>
+          <h3 className="text-orange-100 font-medium mb-1 text-sm">{title}</h3>
+          <div className="text-2xl lg:text-3xl font-bold">{value}</div>
+          <div className="text-orange-100 text-xs mt-1 font-medium">{subtext}</div>
+        </div>
+        <div className="absolute -bottom-4 -right-4 w-24 h-24 bg-orange-400 rounded-full opacity-50 blur-xl"></div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-white p-6 rounded-2xl shadow-sm border border-stone-100 flex flex-col justify-center">
+      <div className="flex items-center gap-2 mb-2">
+        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${colorClass.bg}`}>
+          <Icon size={20} className={colorClass.text} />
+        </div>
+      </div>
+      <h3 className="text-stone-500 font-medium mb-1 text-sm">{title}</h3>
+      <div className="text-2xl lg:text-3xl font-bold text-stone-800">{value}</div>
+      {subtext && <div className="text-stone-500 text-xs mt-1 font-medium">{subtext}</div>}
+    </div>
+  );
+};
+
+/**
+ * Individual Order Item for the Sidebar — now with "Receive Payment" button
+ */
+const OrderCard = ({ order, onPayClick }: { order: Order; onPayClick: (order: Order) => void }) => {
+  const theme = STATUS_THEME[order.status] || STATUS_THEME.default;
+  const total = (order.total_amount + order.tax_amount).toFixed(0);
+  const canPay = order.status !== 'paid';
+
+  return (
+    <div className={`p-4 rounded-xl border flex flex-col gap-2 transition-all hover:shadow-md ${theme.card}`}>
+      <div className="flex justify-between items-start">
+        <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${theme.badgeBg} ${theme.badgeText}`}>
+          {order.status}
+        </span>
+        <span className="text-stone-800 font-bold text-sm">₹{total}</span>
+      </div>
+      <p className="text-sm font-semibold leading-tight text-stone-800">
+        Order #{order.id} • Table {order.table_id}
+      </p>
+      {canPay && (
+        <button
+          onClick={() => onPayClick(order)}
+          className="mt-1 w-full text-xs font-bold text-white bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 py-2 px-3 rounded-lg transition-all shadow-sm shadow-orange-500/20 hover:shadow-md hover:shadow-orange-500/30 flex items-center justify-center gap-1.5 active:scale-[0.98]"
+        >
+          <IndianRupee size={13} /> Receive Payment
+        </button>
+      )}
+      {!canPay && (
+        <div className="mt-1 w-full text-xs font-bold text-blue-600 bg-blue-50 border border-blue-100 py-2 px-3 rounded-lg flex items-center justify-center gap-1.5">
+          <CheckCircle2 size={13} /> Payment Received
+        </div>
+      )}
+    </div>
+  );
+};
+
+/**
+ * Payment Modal with UPI / Cash / Card options
+ */
+const PaymentModal = ({
+  order,
+  onClose,
+  onSuccess,
+}: {
+  order: Order;
+  onClose: () => void;
+  onSuccess: () => void;
+}) => {
+  const [selectedMethod, setSelectedMethod] = useState<string | null>(null);
+  const [processing, setProcessing] = useState(false);
+  const [success, setSuccess] = useState(false);
+
+  const totalAmount = order.total_amount + order.tax_amount;
+
+  const handleConfirmPayment = async () => {
+    if (!selectedMethod) return;
+    setProcessing(true);
+    try {
+      await createPayment({
+        order_id: Number(order.id),
+        amount: totalAmount,
+        method: selectedMethod,
+      });
+      setSuccess(true);
+      setTimeout(() => {
+        onSuccess();
+        onClose();
+      }, 1500);
+    } catch (err) {
+      console.error('Payment failed:', err);
+      setProcessing(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
+      <div
+        className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="bg-gradient-to-r from-orange-500 to-orange-600 p-5 text-white relative">
+          <button
+            onClick={onClose}
+            className="absolute top-4 right-4 text-white/70 hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors"
+          >
+            <X size={18} />
+          </button>
+          <h3 className="text-lg font-bold">Receive Payment</h3>
+          <p className="text-orange-100 text-sm mt-0.5">
+            Order #{order.id} • Table {order.table_id}
+          </p>
+        </div>
+
+        {/* Amount Display */}
+        <div className="p-5 border-b border-stone-100">
+          <div className="bg-stone-50 rounded-xl p-4 flex items-center justify-between">
+            <div>
+              <p className="text-xs text-stone-500 font-medium uppercase tracking-wider">Total Amount</p>
+              <div className="flex items-baseline gap-1 mt-1">
+                <span className="text-3xl font-bold text-stone-800">₹{totalAmount.toFixed(2)}</span>
+              </div>
+              <div className="flex gap-3 mt-1.5 text-xs text-stone-400">
+                <span>Base: ₹{order.total_amount.toFixed(2)}</span>
+                <span>• Tax: ₹{order.tax_amount.toFixed(2)}</span>
+              </div>
+            </div>
+            <div className="w-12 h-12 rounded-full bg-orange-100 flex items-center justify-center">
+              <IndianRupee size={22} className="text-orange-600" />
+            </div>
+          </div>
+        </div>
+
+        {/* Payment Method Selection */}
+        {!success ? (
+          <div className="p-5">
+            <p className="text-sm font-semibold text-stone-700 mb-3">Select Payment Method</p>
+            <div className="grid grid-cols-3 gap-3">
+              {PAYMENT_METHODS.map((method) => {
+                const isSelected = selectedMethod === method.id;
+                return (
+                  <button
+                    key={method.id}
+                    onClick={() => setSelectedMethod(method.id)}
+                    disabled={processing}
+                    className={`relative flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all duration-200
+                      ${isSelected
+                        ? `border-${method.color}-500 bg-${method.color}-50 shadow-md shadow-${method.color}-500/10 scale-[1.02]`
+                        : 'border-stone-200 bg-white hover:border-stone-300 hover:bg-stone-50'
+                      }
+                      ${processing ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
+                    `}
+                    style={isSelected ? {
+                      borderColor: method.id === 'cash' ? '#10b981' : method.id === 'upi' ? '#8b5cf6' : '#3b82f6',
+                      backgroundColor: method.id === 'cash' ? '#ecfdf5' : method.id === 'upi' ? '#f5f3ff' : '#eff6ff',
+                    } : {}}
+                  >
+                    <div
+                      className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                        isSelected ? `bg-gradient-to-br ${method.gradient} text-white shadow-lg` : 'bg-stone-100 text-stone-500'
+                      }`}
+                    >
+                      <method.icon size={20} />
+                    </div>
+                    <span className={`text-sm font-bold ${isSelected ? 'text-stone-800' : 'text-stone-600'}`}>
+                      {method.label}
+                    </span>
+                    {isSelected && (
+                      <div className="absolute -top-1.5 -right-1.5">
+                        <div className={`w-5 h-5 rounded-full bg-gradient-to-br ${method.gradient} flex items-center justify-center shadow-sm`}>
+                          <CheckCircle2 size={12} className="text-white" />
+                        </div>
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Confirm Button */}
+            <button
+              onClick={handleConfirmPayment}
+              disabled={!selectedMethod || processing}
+              className={`w-full mt-5 py-3.5 rounded-xl font-bold text-white transition-all flex items-center justify-center gap-2 text-sm
+                ${selectedMethod && !processing
+                  ? 'bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 shadow-md shadow-orange-500/20 hover:shadow-lg hover:shadow-orange-500/30 active:scale-[0.98]'
+                  : 'bg-stone-300 cursor-not-allowed'
+                }
+              `}
+            >
+              {processing ? (
+                <>
+                  <Loader2 size={18} className="animate-spin" />
+                  Processing Payment...
+                </>
+              ) : (
+                <>
+                  <IndianRupee size={16} />
+                  Confirm Payment — ₹{totalAmount.toFixed(0)}
+                </>
+              )}
+            </button>
+          </div>
+        ) : (
+          /* Success State */
+          <div className="p-8 flex flex-col items-center text-center">
+            <div className="w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mb-4 animate-bounce">
+              <CheckCircle2 size={32} className="text-green-600" />
+            </div>
+            <h4 className="text-xl font-bold text-stone-800">Payment Successful!</h4>
+            <p className="text-stone-500 text-sm mt-1">
+              ₹{totalAmount.toFixed(0)} received via {PAYMENT_METHODS.find(m => m.id === selectedMethod)?.label}
+            </p>
+            <p className="text-green-600 text-xs font-medium mt-3 bg-green-50 px-3 py-1.5 rounded-full">
+              Table {order.table_id} is now Available
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+/**
+ * Loading Skeleton
+ */
+const DashboardSkeleton = () => (
+  <div className="flex flex-col gap-6 w-full max-w-full overflow-hidden animate-pulse">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      {[1, 2, 3, 4].map(i => <div key={i} className="h-32 bg-stone-200 rounded-2xl" />)}
+    </div>
+    <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+      <div className="lg:col-span-3 h-[350px] bg-stone-200 rounded-2xl" />
+      <div className="h-[350px] bg-stone-200 rounded-2xl" />
+    </div>
+  </div>
+);
+
+// -----------------------------------------------------------------------------
+// 3. Main Dashboard Component
+// -----------------------------------------------------------------------------
 
 export default function AdminDashboard() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [recentOrders, setRecentOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
-  const [recentOrders, setRecentOrders] = useState<any[]>([]);
+  const [paymentOrder, setPaymentOrder] = useState<Order | null>(null);
 
-  const loadData = () => {
+  const loadData = async () => {
     setLoading(true);
-    Promise.all([
-      fetchDashboardStats(),
-      fetchOrders().catch(() => [])
-    ]).then(([statsData, ordersData]) => {
+    try {
+      const [statsData, ordersData] = await Promise.all([
+        fetchDashboardStats(),
+        fetchOrders().catch(() => [])
+      ]);
       setStats(statsData);
       setRecentOrders(ordersData.slice(0, 10));
+    } catch (error) {
+      console.error("Failed to fetch dashboard data:", error);
+    } finally {
       setLoading(false);
-    }).catch(() => setLoading(false));
+    }
   };
 
   useEffect(() => {
@@ -29,170 +323,164 @@ export default function AdminDashboard() {
     return () => clearInterval(interval);
   }, []);
 
-  // Build chart data from recent orders
+  // --- Data Transformations ---
+
   const revenueData = recentOrders.length > 0
-    ? recentOrders.slice(0, 7).map((order, i) => ({
-        name: `Order ${order.id}`,
-        revenue: order.total_amount + order.tax_amount,
-        base: order.total_amount,
-      }))
-    : [
-        { name: 'No data', revenue: 0, base: 0 },
-      ];
+    ? recentOrders.slice(0, 7).map((order) => ({
+      name: `Order ${order.id}`,
+      revenue: order.total_amount + order.tax_amount,
+      base: order.total_amount,
+    }))
+    : [{ name: 'No data', revenue: 0, base: 0 }];
 
-  const kotData = stats ? [
-    { name: 'Pending', value: stats.pending_kots, color: '#3b82f6' },
-    { name: 'Preparing', value: stats.preparing_kots, color: '#f97316' },
-    { name: 'Ready', value: stats.ready_kots, color: '#22c55e' },
-  ].filter(d => d.value > 0) : [];
+  const kotData = stats
+    ? [
+      { name: 'Pending', value: stats.pending_kots },
+      { name: 'Preparing', value: stats.preparing_kots },
+      { name: 'Ready', value: stats.ready_kots },
+    ].filter(d => d.value > 0)
+    : [];
 
-  const COLORS = ['#3b82f6', '#f97316', '#22c55e'];
+  const occupancyRate = stats?.total_tables
+    ? Math.round((stats.active_tables / stats.total_tables) * 100)
+    : 0;
+
+  // --- Render ---
 
   if (loading && !stats) {
-    return (
-      <div className="flex flex-col gap-6 w-full max-w-full overflow-hidden animate-pulse">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {[1,2,3,4].map(i => <div key={i} className="h-32 bg-stone-200 rounded-2xl" />)}
-        </div>
-        <div className="h-[350px] bg-stone-200 rounded-2xl" />
-      </div>
-    );
+    return <DashboardSkeleton />;
   }
 
   return (
     <div className="flex flex-col gap-6 w-full max-w-full overflow-hidden">
+
+      {/* Header section */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <h2 className="text-2xl lg:text-3xl font-bold text-stone-800 tracking-tight">Overview</h2>
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2 text-stone-500 bg-white px-3 py-1.5 rounded-xl border border-stone-100 shadow-sm text-sm font-medium">
-              <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-              Live System Status
+            <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+            Live System Status
           </div>
-          <button onClick={loadData} className="p-2 bg-white border border-stone-200 rounded-lg hover:bg-stone-50 text-stone-500 transition-colors">
-              <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+          <button
+            onClick={loadData}
+            disabled={loading}
+            className="p-2 bg-white border border-stone-200 rounded-lg hover:bg-stone-50 text-stone-500 transition-colors disabled:opacity-50"
+            aria-label="Refresh Dashboard"
+          >
+            <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
           </button>
         </div>
       </div>
-      
+
       {/* Top Metrics Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-         <div className="bg-white p-6 rounded-2xl shadow-sm border border-stone-100 flex flex-col justify-center">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="w-10 h-10 bg-green-50 rounded-xl flex items-center justify-center"><IndianRupee size={20} className="text-green-600" /></div>
-            </div>
-            <h3 className="text-stone-500 font-medium mb-1 text-sm">Total Revenue</h3>
-            <div className="text-2xl lg:text-3xl font-bold text-stone-800">₹{stats?.total_revenue?.toLocaleString() || 0}</div>
-         </div>
-         <div className="bg-white p-6 rounded-2xl shadow-sm border border-stone-100 flex flex-col justify-center">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center"><ShoppingBag size={20} className="text-blue-600" /></div>
-            </div>
-            <h3 className="text-stone-500 font-medium mb-1 text-sm">Total Orders</h3>
-            <div className="text-2xl lg:text-3xl font-bold text-stone-800">{stats?.total_orders || 0}</div>
-            <div className="text-stone-500 text-xs mt-1 font-medium">Avg ₹{stats?.avg_order_value?.toLocaleString() || 0}</div>
-         </div>
-         <div className="bg-white p-6 rounded-2xl shadow-sm border border-stone-100 flex flex-col justify-center">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="w-10 h-10 bg-amber-50 rounded-xl flex items-center justify-center"><Armchair size={20} className="text-amber-600" /></div>
-            </div>
-            <h3 className="text-stone-500 font-medium mb-1 text-sm">Active Tables</h3>
-            <div className="text-2xl lg:text-3xl font-bold text-stone-800">{stats?.active_tables || 0} / {stats?.total_tables || 0}</div>
-            <div className="text-stone-500 text-xs mt-1 font-medium">{stats?.total_tables ? Math.round((stats.active_tables / stats.total_tables) * 100) : 0}% Occupancy</div>
-         </div>
-         <div className="bg-orange-500 p-6 rounded-2xl shadow-md shadow-orange-500/20 text-white flex flex-col justify-center relative overflow-hidden">
-             <div className="relative z-10">
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center"><ChefHat size={20} className="text-white" /></div>
-                </div>
-                <h3 className="text-orange-100 font-medium mb-1 text-sm">Kitchen Queue</h3>
-                <div className="text-2xl lg:text-3xl font-bold">{(stats?.pending_kots || 0) + (stats?.preparing_kots || 0)}</div>
-                <div className="text-orange-100 text-xs mt-1 font-medium">{stats?.ready_kots || 0} ready to serve</div>
-             </div>
-             <div className="absolute -bottom-4 -right-4 w-24 h-24 bg-orange-400 rounded-full opacity-50 blur-xl"></div>
-         </div>
+        <StatCard
+          title="Total Revenue"
+          value={`₹${stats?.total_revenue?.toLocaleString() || 0}`}
+          icon={IndianRupee}
+          colorClass={{ bg: 'bg-green-50', text: 'text-green-600' }}
+        />
+        <StatCard
+          title="Total Orders"
+          value={stats?.total_orders || 0}
+          subtext={`Avg ₹${stats?.avg_order_value?.toLocaleString() || 0}`}
+          icon={ShoppingBag}
+          colorClass={{ bg: 'bg-blue-50', text: 'text-blue-600' }}
+        />
+        <StatCard
+          title="Active Tables"
+          value={`${stats?.active_tables || 0} / ${stats?.total_tables || 0}`}
+          subtext={`${occupancyRate}% Occupancy`}
+          icon={Armchair}
+          colorClass={{ bg: 'bg-amber-50', text: 'text-amber-600' }}
+        />
+        <StatCard
+          title="Kitchen Queue"
+          value={(stats?.pending_kots || 0) + (stats?.preparing_kots || 0)}
+          subtext={`${stats?.ready_kots || 0} ready to serve`}
+          icon={ChefHat}
+          isSpecial={true}
+        />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+
         {/* Main Charts Area */}
         <div className="lg:col-span-3 flex flex-col gap-6 min-w-0">
-            {/* Revenue by Order */}
-            <div className="bg-white p-4 lg:p-6 rounded-2xl shadow-sm border border-stone-100">
-                <h3 className="text-lg lg:text-xl font-bold text-stone-800 mb-6 flex items-center gap-2">
-                    <TrendingUp size={20} className="text-orange-500" /> Revenue by Order
-                </h3>
-                <div className="h-[250px] lg:h-[300px] w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={revenueData} margin={{ top: 5, right: 10, left: -20, bottom: 5 }}>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f5f5f4" />
-                            <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#78716c', fontSize: 12}} />
-                            <YAxis axisLine={false} tickLine={false} tick={{fill: '#78716c', fontSize: 12}} tickFormatter={(value) => `₹${value}`} />
-                            <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
-                            <Bar dataKey="revenue" name="Total (incl. tax)" fill="#f97316" radius={[4, 4, 0, 0]} />
-                            <Bar dataKey="base" name="Base" fill="#fed7aa" radius={[4, 4, 0, 0]} />
-                        </BarChart>
-                    </ResponsiveContainer>
-                </div>
-            </div>
 
-            {/* KOT Status Distribution */}
-            {kotData.length > 0 && (
-                <div className="bg-white p-4 lg:p-6 rounded-2xl shadow-sm border border-stone-100">
-                    <h3 className="text-lg lg:text-xl font-bold text-stone-800 mb-6">Kitchen Status</h3>
-                    <div className="h-[250px] w-full">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <PieChart>
-                                <Pie data={kotData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
-                                    {kotData.map((entry, index) => (
-                                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                    ))}
-                                </Pie>
-                                <Tooltip contentStyle={{ borderRadius: '12px', border: 'none' }} />
-                                <Legend wrapperStyle={{ fontSize: '12px' }} />
-                            </PieChart>
-                        </ResponsiveContainer>
-                    </div>
-                </div>
-            )}
+          {/* Revenue Bar Chart */}
+          <div className="bg-white p-4 lg:p-6 rounded-2xl shadow-sm border border-stone-100">
+            <h3 className="text-lg lg:text-xl font-bold text-stone-800 mb-6 flex items-center gap-2">
+              <TrendingUp size={20} className="text-orange-500" /> Revenue by Order
+            </h3>
+            <div className="h-[250px] lg:h-[300px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={revenueData} margin={{ top: 5, right: 10, left: -20, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f5f5f4" />
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#78716c', fontSize: 12 }} />
+                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#78716c', fontSize: 12 }} tickFormatter={(value) => `₹${value}`} />
+                  <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                  <Bar dataKey="revenue" name="Total (incl. tax)" fill="#f97316" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="base" name="Base" fill="#fed7aa" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* KOT Status Pie Chart */}
+          {kotData.length > 0 && (
+            <div className="bg-white p-4 lg:p-6 rounded-2xl shadow-sm border border-stone-100">
+              <h3 className="text-lg lg:text-xl font-bold text-stone-800 mb-6">Kitchen Status</h3>
+              <div className="h-[250px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={kotData} cx="50%" cy="50%" innerRadius={60} outerRadius={80} paddingAngle={5} dataKey="value">
+                      {kotData.map((_, index) => (
+                        <Cell key={`cell-${index}`} fill={KOT_COLORS[index % KOT_COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip contentStyle={{ borderRadius: '12px', border: 'none' }} />
+                    <Legend wrapperStyle={{ fontSize: '12px' }} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Recent Orders Sidebar */}
         <div className="flex flex-col gap-6">
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-stone-100 h-full">
-                <h3 className="text-xl font-bold text-stone-800 mb-6 flex items-center gap-2">
-                    <AlertCircle size={20} className="text-orange-500" /> Recent Orders
-                </h3>
-                <div className="flex flex-col gap-4">
-                    {recentOrders.length === 0 ? (
-                        <p className="text-stone-400 text-sm text-center py-8">No orders yet</p>
-                    ) : (
-                        recentOrders.map(order => (
-                            <div key={order.id} className={`p-4 rounded-xl border flex flex-col gap-1 transition-all hover:shadow-md cursor-pointer ${
-                                order.status === 'kitchen' ? 'bg-orange-50 border-orange-100' :
-                                order.status === 'served' ? 'bg-green-50 border-green-100' :
-                                order.status === 'paid' ? 'bg-blue-50 border-blue-100' :
-                                'bg-stone-50 border-stone-100'
-                            }`}>
-                                <div className="flex justify-between items-start">
-                                    <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${
-                                        order.status === 'kitchen' ? 'bg-orange-100 text-orange-700' :
-                                        order.status === 'served' ? 'bg-green-100 text-green-700' :
-                                        order.status === 'paid' ? 'bg-blue-100 text-blue-700' :
-                                        'bg-stone-100 text-stone-700'
-                                    }`}>
-                                        {order.status}
-                                    </span>
-                                    <span className="text-stone-800 font-bold text-sm">₹{(order.total_amount + order.tax_amount).toFixed(0)}</span>
-                                </div>
-                                <p className="text-sm font-semibold leading-tight text-stone-800">
-                                    Order #{order.id} • Table {order.table_id}
-                                </p>
-                            </div>
-                        ))
-                    )}
-                </div>
+          <div className="bg-white p-6 rounded-2xl shadow-sm border border-stone-100 h-full">
+            <h3 className="text-xl font-bold text-stone-800 mb-6 flex items-center gap-2">
+              <AlertCircle size={20} className="text-orange-500" /> Recent Orders
+            </h3>
+            <div className="flex flex-col gap-4">
+              {recentOrders.length === 0 ? (
+                <p className="text-stone-400 text-sm text-center py-8">No orders yet</p>
+              ) : (
+                recentOrders.map(order => (
+                  <OrderCard
+                    key={order.id}
+                    order={order}
+                    onPayClick={(o) => setPaymentOrder(o)}
+                  />
+                ))
+              )}
             </div>
+          </div>
         </div>
+
       </div>
+
+      {/* Payment Modal */}
+      {paymentOrder && (
+        <PaymentModal
+          order={paymentOrder}
+          onClose={() => setPaymentOrder(null)}
+          onSuccess={loadData}
+        />
+      )}
     </div>
   );
 }

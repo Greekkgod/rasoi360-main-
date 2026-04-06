@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
+import { useState } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
 
 import CustomerLayout from '@/layouts/CustomerLayout';
@@ -21,7 +21,7 @@ import CartCheckout from '@/pages/customer/CartCheckout';
 const DevLoginSwitcher = () => {
     const { user, login, logout } = useAuthStore();
     const navigate = useNavigate();
-    const location = useLocation();
+
     const [isDevOpen, setIsDevOpen] = useState(true);
 
     const handleLogin = (userData: { id: number; name: string; role: 'Admin' | 'Waiter' | 'Chef' | 'Cashier' | 'Customer' }, targetPath: string) => {

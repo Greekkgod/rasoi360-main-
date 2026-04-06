@@ -128,3 +128,17 @@ class DashboardStats(BaseModel):
     pending_kots: int
     preparing_kots: int
     ready_kots: int
+
+# --- Payments ---
+class PaymentCreate(BaseModel):
+    order_id: int
+    amount: float
+    method: str  # "cash", "upi", "card"
+
+class PaymentOut(BaseModel):
+    id: int
+    order_id: int
+    amount: float
+    method: str
+    status: str
+    model_config = ConfigDict(from_attributes=True)
