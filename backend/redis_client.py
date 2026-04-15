@@ -4,7 +4,7 @@ import json
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 
-# Mock Redis client for local testing without Redis installed
+# Mock Redis client for local testing completely isolated from Docker
 class MockRedis:
     def __init__(self):
         self.cache = {}
@@ -18,6 +18,9 @@ class MockRedis:
     async def delete(self, key):
         if key in self.cache:
             del self.cache[key]
+            
+    async def ping(self):
+        return True
 
 redis_client = MockRedis()
 

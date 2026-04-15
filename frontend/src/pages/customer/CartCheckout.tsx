@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Receipt, CheckCircle2, Loader2, Plus, Minus, Trash2 } from 'lucide-react';
+import { ChevronLeft, Receipt, CheckCircle2, Loader2, Plus, Minus, Trash2, AlertTriangle } from 'lucide-react';
 import { useCartStore } from '@/store/cartStore';
+import { useAuthStore } from '@/store/authStore';
 import { createOrder } from '@/lib/api';
 
 export default function CartCheckout() {
@@ -10,15 +11,16 @@ export default function CartCheckout() {
     const [orderSuccess, setOrderSuccess] = useState(false);
     const [instructions, setInstructions] = useState('');
 
-    const { items, updateQty, removeItem, getTotal, getTax, getGrandTotal, clearCart } = useCartStore();
+    const { items, tableId, updateQty, removeItem, getTotal, getTax, getGrandTotal, clearCart } = useCartStore();
+    const user = useAuthStore(state => state.user);
 
     const handlePlaceOrder = async () => {
-        if (items.length === 0) return;
+        if (items.length === 0 || !tableId) return;
         setIsPlacing(true);
         try {
             await createOrder({
-                table_id: 1, // Default table for customer orders
-                user_id: 1,  // Default user for customer self-ordering
+                table_id: tableId,
+                user_id: user?.id ?? null,
                 items: items.map(item => ({
                     menu_item_id: item.id,
                     quantity: item.qty,
@@ -64,6 +66,16 @@ export default function CartCheckout() {
                     <span className="text-xs font-bold text-orange-600 uppercase tracking-widest">{items.length} items</span>
                 </div>
             </div>
+
+            {!tableId && items.length > 0 && (
+                <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-start gap-3">
+                    <AlertTriangle size={20} className="text-amber-600 mt-0.5 shrink-0" />
+                    <div>
+                        <p className="font-semibold text-amber-800 text-sm">No table selected</p>
+                        <p className="text-amber-600 text-xs mt-1">Please scan the QR code on your table to link your order. Without a table, you won't be able to place your order.</p>
+                    </div>
+                </div>
+            )}
 
             {items.length === 0 ? (
                 <div className="flex flex-col items-center justify-center gap-4 py-20 text-stone-400">

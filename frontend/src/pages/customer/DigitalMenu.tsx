@@ -1,18 +1,30 @@
 import { useState, useEffect } from 'react';
 import { Search, Plus, Minus, ShoppingCart } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { fetchMenu, type Category, type MenuItem } from '@/lib/api';
 import { useCartStore } from '@/store/cartStore';
 
 export default function DigitalMenu() {
     const navigate = useNavigate();
+    const [searchParams] = useSearchParams();
     const [categories, setCategories] = useState<Category[]>([]);
     const [activeTab, setActiveTab] = useState<string>('All');
     const [searchQuery, setSearchQuery] = useState('');
     const [loading, setLoading] = useState(true);
 
-    const { items: cartItems, addItem, updateQty, removeItem, getItemCount } = useCartStore();
+    const { items: cartItems, addItem, updateQty, removeItem, getItemCount, setTableId } = useCartStore();
     const cartCount = getItemCount();
+
+    // Capture table ID from QR code URL param (e.g. /?table=5)
+    useEffect(() => {
+        const tableParam = searchParams.get('table');
+        if (tableParam) {
+            const id = parseInt(tableParam, 10);
+            if (!isNaN(id) && id > 0) {
+                setTableId(id);
+            }
+        }
+    }, [searchParams, setTableId]);
 
     useEffect(() => {
         fetchMenu()

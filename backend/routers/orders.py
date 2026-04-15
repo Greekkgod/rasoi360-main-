@@ -1,37 +1,46 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from typing import List
+from typing import List, Optional
 import datetime
 
 import schemas, crud
 from database import get_db
 from ws_manager import kds_manager
+from dependencies import require_staff, get_optional_user
+import models
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
 
 @router.get("/", response_model=List[schemas.OrderDetailOut])
-async def list_orders(db: AsyncSession = Depends(get_db)):
+async def list_orders(db: AsyncSession = Depends(get_db), current_user: models.User = Depends(require_staff)):
     orders = await crud.get_all_orders(db)
     return orders
 
 @router.get("/{order_id}", response_model=schemas.OrderDetailOut)
-async def get_order(order_id: int, db: AsyncSession = Depends(get_db)):
+async def get_order(order_id: int, db: AsyncSession = Depends(get_db), current_user: models.User = Depends(require_staff)):
     order = await crud.get_order_by_id(db, order_id)
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
     return order
 
 @router.post("/", response_model=schemas.OrderOut)
-async def create_order(order_in: schemas.OrderCreate, db: AsyncSession = Depends(get_db)):
+async def create_order(
+    order_in: schemas.OrderCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: Optional[models.User] = Depends(get_optional_user),
+):
+    """Create an order. Accessible by both authenticated staff and unauthenticated customers."""
+    # If authenticated staff is creating the order, auto-fill user_id
+    if current_user and order_in.user_id is None:
+        order_in.user_id = current_user.id
+
     db_order, kots = await crud.create_order_with_routing(db, order_in)
     
     # Broadcast to KDS via WebSocket
     for kot in kots:
         # Reload KOT with items eagerly loaded
-        loaded_kot = None
         from sqlalchemy.future import select
         from sqlalchemy.orm import selectinload
-        import models
         stmt = (
             select(models.KOT)
             .where(models.KOT.id == kot.id)
@@ -78,7 +87,7 @@ async def create_order(order_in: schemas.OrderCreate, db: AsyncSession = Depends
     return db_order
 
 @router.patch("/{order_id}/status", response_model=schemas.OrderOut)
-async def update_order_status(order_id: int, status_update: schemas.OrderStatusUpdate, db: AsyncSession = Depends(get_db)):
+async def update_order_status(order_id: int, status_update: schemas.OrderStatusUpdate, db: AsyncSession = Depends(get_db), current_user: models.User = Depends(require_staff)):
     db_order = await crud.update_order_status(db, order_id, status_update.status)
     if not db_order:
         raise HTTPException(status_code=404, detail="Order not found")
@@ -88,3 +97,15 @@ async def update_order_status(order_id: int, status_update: schemas.OrderStatusU
         await crud.update_table_status(db, db_order.table_id, "Available")
     
     return db_order
+
+@router.post("/{order_id}/discount", response_model=schemas.OrderOut)
+async def apply_discount(
+    order_id: int, 
+    discount: schemas.OrderApplyDiscount, 
+    db: AsyncSession = Depends(get_db),
+    user: models.User = Depends(require_staff)
+):
+    order = await crud.apply_order_discount(db, order_id, discount)
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found or already paid")
+    return order

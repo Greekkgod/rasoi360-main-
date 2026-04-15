@@ -16,9 +16,24 @@ export default function TableGrid() {
     };
 
     useEffect(() => {
-        loadTables();
-        const interval = setInterval(loadTables, 10000); // Refresh every 10s
-        return () => clearInterval(interval);
+        let isMounted = true;
+        const fetchAndSet = () => {
+             fetchTables().then(data => {
+                 if (isMounted) {
+                     setTables(data);
+                     setLoading(false);
+                 }
+             }).catch(() => {
+                 if (isMounted) setLoading(false);
+             });
+        };
+        
+        fetchAndSet();
+        const interval = setInterval(fetchAndSet, 10000); // Refresh every 10s
+        return () => {
+            isMounted = false;
+            clearInterval(interval);
+        };
     }, []);
 
     const getStatusColor = (status: string) => {

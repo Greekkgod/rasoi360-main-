@@ -136,13 +136,17 @@ async def create_order_with_routing(db: AsyncSession, order_in: schemas.OrderCre
     menu_items = await get_menu_items_by_ids(db, item_ids)
     menu_item_map = {mi.id: mi for mi in menu_items}
 
-    # Calculate total
+    # Calculate total and variable tax
     total = 0.0
+    tax = 0.0
     for item_in in order_in.items:
         mi = menu_item_map.get(item_in.menu_item_id)
         if mi:
-            total += mi.price * item_in.quantity
-    tax = round(total * 0.05, 2)  # 5% GST
+            item_total = mi.price * item_in.quantity
+            total += item_total
+            tax += item_total * (mi.tax_slab / 100.0)
+    tax = round(tax, 2)
+    final_total = round(total + tax, 2)
 
     # 2. Create the Order
     db_order = models.Order(
@@ -150,7 +154,8 @@ async def create_order_with_routing(db: AsyncSession, order_in: schemas.OrderCre
         user_id=order_in.user_id,
         status="kitchen",
         total_amount=round(total, 2),
-        tax_amount=tax
+        tax_amount=tax,
+        final_total=final_total
     )
     db.add(db_order)
     await db.flush()
@@ -201,7 +206,31 @@ async def create_order_with_routing(db: AsyncSession, order_in: schemas.OrderCre
     await db.commit()
     await db.refresh(db_order)
     
-    return db_order, kots_created
+    # Fetch again to get fully populated relationships
+    full_order = await get_order_by_id(db, db_order.id)
+    return full_order, kots_created
+
+async def apply_order_discount(db: AsyncSession, order_id: int, discount: schemas.OrderApplyDiscount):
+    order = await get_order_by_id(db, order_id)
+    if not order:
+        return None
+        
+    base_total = order.total_amount + order.tax_amount
+    discount_amt = 0.0
+    if discount.discount_type == 'flat':
+        discount_amt = discount.discount_amount
+    elif discount.discount_type == 'percentage':
+        discount_amt = base_total * (discount.discount_amount / 100.0)
+        
+    discount_amt = round(min(discount_amt, base_total), 2)
+    
+    order.discount_amount = discount_amt
+    order.discount_type = discount.discount_type
+    order.final_total = round(base_total - discount_amt, 2)
+    
+    await db.commit()
+    await db.refresh(order)
+    return order
 
 # --- KOTs ---
 async def get_active_kots(db: AsyncSession):
@@ -291,23 +320,68 @@ async def get_dashboard_stats(db: AsyncSession):
 
 # --- Payments ---
 async def create_payment(db: AsyncSession, payment: schemas.PaymentCreate):
+    # Fetch order to generate invoice and free table
+    order_stmt = select(models.Order).where(models.Order.id == payment.order_id)
+    order_result = await db.execute(order_stmt)
+    db_order = order_result.scalar_one_or_none()
+    
+    if not db_order:
+        return None
+        
+    # Calculate track total paid
+    payment_stmt = select(func.sum(models.Payment.amount)).where(models.Payment.order_id == payment.order_id)
+    payment_result = await db.execute(payment_stmt)
+    total_paid_already = payment_result.scalar() or 0.0
+    
+    remaining = db_order.final_total - total_paid_already
+    if remaining <= 0:
+        return None  # Already paid
+        
+    actual_amount = round(min(payment.amount, remaining), 2)
+
     # Create Payment record
     db_payment = models.Payment(
         order_id=payment.order_id,
-        amount=payment.amount,
+        amount=actual_amount,
         method=payment.method,
         status="Completed"
     )
     db.add(db_payment)
+    await db.flush()
+    
+    new_total_paid = round(total_paid_already + actual_amount, 2)
 
-    # Mark order as paid
-    await update_order_status(db, payment.order_id, "paid")
+    if new_total_paid >= db_order.final_total:
+        db_order.status = "paid"
+    
+        # Generate Invoice Number
+        current_year = datetime.datetime.utcnow().year
+        next_year_short = str(current_year + 1)[-2:]
+        prefix = f"R360/{current_year}-{next_year_short}/"
+        
+        inv_count_stmt = select(func.count(models.Invoice.id))
+        inv_count = await db.execute(inv_count_stmt)
+        next_id = (inv_count.scalar() or 0) + 1
+        invoice_number = f"{prefix}{next_id:04d}"
+        
+        # CGST / SGST Split
+        half_tax = round(db_order.tax_amount / 2, 2)
+        
+        # Prevent duplicate invoices using safe verification
+        inv_check = await db.execute(select(models.Invoice).where(models.Invoice.order_id == db_order.id))
+        existing_invoice = inv_check.scalar_one_or_none()
+        if not existing_invoice:
+            db_invoice = models.Invoice(
+                invoice_number=invoice_number,
+                order_id=db_order.id,
+                cgst=half_tax,
+                sgst=half_tax,
+                discount_applied=db_order.discount_amount,
+                total_amount=db_order.final_total
+            )
+            db.add(db_invoice)
 
-    # Free up the table
-    order_stmt = select(models.Order).where(models.Order.id == payment.order_id)
-    order_result = await db.execute(order_stmt)
-    db_order = order_result.scalar_one_or_none()
-    if db_order:
+        # Free up the table
         await update_table_status(db, db_order.table_id, "Available")
 
     await db.commit()

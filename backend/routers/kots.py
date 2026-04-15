@@ -5,16 +5,26 @@ from typing import List
 import schemas, crud
 from database import get_db
 from ws_manager import kds_manager
+from dependencies import require_staff
+import models
 
 router = APIRouter(prefix="/kots", tags=["KOTs"])
 
 @router.get("/", response_model=List[schemas.KOTOut])
-async def list_active_kots(db: AsyncSession = Depends(get_db)):
+async def list_active_kots(
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(require_staff),
+):
     kots = await crud.get_active_kots(db)
     return kots
 
 @router.patch("/{kot_id}/status", response_model=schemas.KOTOut)
-async def update_kot_status(kot_id: int, status_update: schemas.KOTStatusUpdate, db: AsyncSession = Depends(get_db)):
+async def update_kot_status(
+    kot_id: int,
+    status_update: schemas.KOTStatusUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: models.User = Depends(require_staff),
+):
     db_kot = await crud.update_kot_status(db, kot_id, status_update.status)
     if not db_kot:
         raise HTTPException(status_code=404, detail="KOT not found")

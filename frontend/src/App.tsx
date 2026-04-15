@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
 
@@ -9,6 +9,7 @@ import AdminLayout from '@/layouts/AdminLayout';
 import AdminDashboard from '@/pages/admin/AdminDashboard';
 import MenuEditor from '@/pages/admin/MenuEditor';
 import StaffManager from '@/pages/admin/StaffManager';
+import { Login } from '@/pages/auth/Login';
 
 import TableGrid from '@/pages/pos/TableGrid';
 import OrderEntry from '@/pages/pos/OrderEntry';
@@ -109,6 +110,24 @@ const DevLoginSwitcher = () => {
 };
 
 export default function App() {
+  const { hydrateFromToken, isHydrating } = useAuthStore();
+
+  useEffect(() => {
+    hydrateFromToken();
+  }, [hydrateFromToken]);
+
+  // Show loading state while checking for existing session
+  if (isHydrating) {
+    return (
+      <div className="flex h-screen w-screen items-center justify-center bg-stone-50">
+        <div className="flex flex-col items-center gap-4">
+          <div className="h-12 w-12 rounded-2xl bg-orange-600 flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-orange-600/30 animate-pulse">R</div>
+          <p className="text-stone-400 text-sm font-medium">Loading Rasoi360...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <BrowserRouter>
       <Routes>
@@ -117,6 +136,8 @@ export default function App() {
           <Route index element={<DigitalMenu />} />
           <Route path="cart" element={<CartCheckout />} />
         </Route>
+        
+        <Route path="/login" element={<Login />} />
 
         {/* POS / Staff Facing Routes */}
         <Route path="/pos" element={<POSLayout />}>

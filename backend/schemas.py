@@ -18,6 +18,7 @@ class CategoryOut(CategoryBase):
 class MenuItemBase(BaseModel):
     name: str
     price: float
+    tax_slab: float = 5.0
     is_veg: bool = True
     is_available: bool = True
     image_url: Optional[str] = None
@@ -93,22 +94,33 @@ class KOTStatusUpdate(BaseModel):
 
 class OrderCreate(BaseModel):
     table_id: int
-    user_id: int  # Waiter ID
+    user_id: Optional[int] = None  # Waiter ID (null for customer self-service)
     items: List[KOTItemCreate]
+
+class OrderUpdateStatus(BaseModel):
+    status: str
+
+class OrderApplyDiscount(BaseModel):
+    discount_amount: float
+    discount_type: str  # "flat" or "percentage"
 
 class OrderOut(BaseModel):
     id: int
     table_id: int
-    user_id: int
+    user_id: Optional[int] = None
     status: str
     total_amount: float
     tax_amount: float
+    discount_amount: float = 0.0
+    discount_type: Optional[str] = None
+    final_total: float = 0.0
+    created_at: datetime.datetime
     model_config = ConfigDict(from_attributes=True)
 
 class OrderDetailOut(BaseModel):
     id: int
     table_id: int
-    user_id: int
+    user_id: Optional[int] = None
     status: str
     total_amount: float
     tax_amount: float
@@ -142,3 +154,38 @@ class PaymentOut(BaseModel):
     method: str
     status: str
     model_config = ConfigDict(from_attributes=True)
+
+class InvoiceOut(BaseModel):
+    id: int
+    invoice_number: str
+    order_id: int
+    gstin: Optional[str] = None
+    cgst: float
+    sgst: float
+    igst: float
+    discount_applied: float = 0.0
+    total_amount: float
+    created_at: datetime.datetime
+    model_config = ConfigDict(from_attributes=True)
+
+# --- Auth ---
+class LoginRequest(BaseModel):
+    identifier: str  # email or phone number
+    password: str
+
+class UserOut(BaseModel):
+    id: int
+    full_name: str
+    email: Optional[str] = None
+    phone_number: str
+    role: str
+    model_config = ConfigDict(from_attributes=True)
+
+class TokenResponse(BaseModel):
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
+    user: UserOut
+
+class RefreshRequest(BaseModel):
+    refresh_token: str

@@ -7,19 +7,13 @@ import {
   AlertCircle, TrendingUp, RefreshCw, ChefHat,
   ShoppingBag, Armchair, IndianRupee, CreditCard, Banknote, Smartphone, X, CheckCircle2, Loader2
 } from 'lucide-react';
-import { fetchDashboardStats, fetchOrders, createPayment, type DashboardStats } from '@/lib/api';
+import { fetchDashboardStats, fetchOrders, type DashboardStats, type Order } from '@/lib/api';
 
 // -----------------------------------------------------------------------------
 // 1. Types & Constants
 // -----------------------------------------------------------------------------
 
-export interface Order {
-  id: string | number;
-  table_id: string | number;
-  status: 'kitchen' | 'served' | 'paid' | 'pending' | string;
-  total_amount: number;
-  tax_amount: number;
-}
+// Order type is imported from @/lib/api
 
 const KOT_COLORS = ['#3b82f6', '#f97316', '#22c55e'];
 
@@ -124,23 +118,60 @@ const PaymentModal = ({
   const [selectedMethod, setSelectedMethod] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [partialAmount, setPartialAmount] = useState<string>('');
+  
+  const [discountVal, setDiscountVal] = useState<string>('');
+  const [discountType, setDiscountType] = useState<string>('flat');
+  const [localOrder, setLocalOrder] = useState<Order>(order);
 
-  const totalAmount = order.total_amount + order.tax_amount;
+  const baseTotal = localOrder.total_amount + localOrder.tax_amount;
+  // If final_total is 0 internally, baseTotal is used.
+  const finalPayable = localOrder.final_total > 0 ? localOrder.final_total : baseTotal;
+  
+  // Fallback remaining logic if payments aren't eagerly loaded into Order
+  const remaining = finalPayable; 
+
+  const amountToPay = partialAmount && !isNaN(Number(partialAmount)) 
+    ? Math.min(Number(partialAmount), remaining) 
+    : remaining;
+
+  const handleApplyDiscount = async () => {
+    if (!discountVal || isNaN(Number(discountVal))) return;
+    setProcessing(true);
+    try {
+      const module = await import('@/lib/api');
+      const updatedOrder = await module.applyOrderDiscount(Number(localOrder.id), {
+        discount_amount: Number(discountVal),
+        discount_type: discountType
+      });
+      setLocalOrder(updatedOrder);
+      setDiscountVal('');
+    } catch (err) {
+      console.error(err);
+    }
+    setProcessing(false);
+  };
 
   const handleConfirmPayment = async () => {
     if (!selectedMethod) return;
     setProcessing(true);
     try {
-      await createPayment({
-        order_id: Number(order.id),
-        amount: totalAmount,
+      const module = await import('@/lib/api');
+      const result = await module.createPayment({
+        order_id: Number(localOrder.id),
+        amount: amountToPay,
         method: selectedMethod,
-      });
-      setSuccess(true);
-      setTimeout(() => {
-        onSuccess();
-        onClose();
-      }, 1500);
+      }) as any;
+      
+      if (result.order_status === 'paid') {
+          setSuccess(true);
+      } else {
+          // It's a partial payment, just close and refresh
+          onSuccess();
+          onClose();
+          return;
+      }
+      onSuccess(); // refresh parent for full pays too
     } catch (err) {
       console.error('Payment failed:', err);
       setProcessing(false);
@@ -168,20 +199,58 @@ const PaymentModal = ({
         </div>
 
         {/* Amount Display */}
-        <div className="p-5 border-b border-stone-100">
-          <div className="bg-stone-50 rounded-xl p-4 flex items-center justify-between">
-            <div>
-              <p className="text-xs text-stone-500 font-medium uppercase tracking-wider">Total Amount</p>
-              <div className="flex items-baseline gap-1 mt-1">
-                <span className="text-3xl font-bold text-stone-800">₹{totalAmount.toFixed(2)}</span>
+        <div className="p-5 border-b border-stone-100 text-sm">
+          <div className="bg-stone-50 rounded-xl p-4">
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-stone-500">Base Amount</span>
+              <span className="font-bold">₹{localOrder.total_amount.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between items-center mb-2 text-stone-500">
+              <span>Taxes (GST)</span>
+              <span className="font-bold text-orange-600">₹{localOrder.tax_amount.toFixed(2)}</span>
+            </div>
+            
+            {localOrder.discount_amount > 0 ? (
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-emerald-600">Discount Applied</span>
+                <span className="font-bold text-emerald-600">-₹{localOrder.discount_amount.toFixed(2)}</span>
               </div>
-              <div className="flex gap-3 mt-1.5 text-xs text-stone-400">
-                <span>Base: ₹{order.total_amount.toFixed(2)}</span>
-                <span>• Tax: ₹{order.tax_amount.toFixed(2)}</span>
+            ) : (
+              <div className="flex gap-2 mt-3 items-center">
+                <input 
+                  type="text" 
+                  placeholder="Discount Amt" 
+                  value={discountVal}
+                  onChange={e => setDiscountVal(e.target.value)}
+                  className="border p-1.5 rounded-lg w-24 outline-none text-xs" 
+                />
+                <select value={discountType} onChange={e => setDiscountType(e.target.value)} className="border p-1.5 rounded-lg text-xs outline-none">
+                  <option value="flat">₹ Flat</option>
+                  <option value="percentage">% Percent</option>
+                </select>
+                <button onClick={handleApplyDiscount} className="bg-stone-800 text-white px-3 py-1.5 rounded-lg text-xs font-bold shrink-0">
+                  Apply
+                </button>
+              </div>
+            )}
+            
+            <div className="flex justify-between items-end mt-4 pt-4 border-t border-stone-200">
+              <p className="text-xs text-stone-500 font-medium uppercase tracking-wider">Final Payable</p>
+              <div className="flex items-center gap-2">
+                <IndianRupee size={22} className="text-orange-600" />
+                <span className="text-3xl font-bold text-stone-800">₹{finalPayable.toFixed(2)}</span>
               </div>
             </div>
-            <div className="w-12 h-12 rounded-full bg-orange-100 flex items-center justify-center">
-              <IndianRupee size={22} className="text-orange-600" />
+            
+            <div className="mt-4 pt-4 border-t border-stone-200 flex items-center justify-between">
+               <span className="text-stone-600 text-xs font-bold">Partial Payment (Optional):</span>
+               <input 
+                  type="number" 
+                  placeholder={`Max ₹${remaining.toFixed(2)}`}
+                  value={partialAmount}
+                  onChange={e => setPartialAmount(e.target.value)}
+                  className="border border-stone-300 p-1.5 rounded-lg text-right w-28 text-sm outline-none focus:border-orange-500"
+               />
             </div>
           </div>
         </div>
@@ -251,7 +320,7 @@ const PaymentModal = ({
               ) : (
                 <>
                   <IndianRupee size={16} />
-                  Confirm Payment — ₹{totalAmount.toFixed(0)}
+                  Confirm Payment — ₹{amountToPay.toFixed(2)}
                 </>
               )}
             </button>
@@ -263,12 +332,25 @@ const PaymentModal = ({
               <CheckCircle2 size={32} className="text-green-600" />
             </div>
             <h4 className="text-xl font-bold text-stone-800">Payment Successful!</h4>
-            <p className="text-stone-500 text-sm mt-1">
-              ₹{totalAmount.toFixed(0)} received via {PAYMENT_METHODS.find(m => m.id === selectedMethod)?.label}
+            <p className="text-stone-500 text-sm mt-1 mb-4">
+              ₹{amountToPay.toFixed(2)} received via {PAYMENT_METHODS.find(m => m.id === selectedMethod)?.label}
             </p>
-            <p className="text-green-600 text-xs font-medium mt-3 bg-green-50 px-3 py-1.5 rounded-full">
-              Table {order.table_id} is now Available
-            </p>
+            <button 
+              onClick={() => {
+                import('@/lib/api').then(module => {
+                  module.downloadOrderInvoicePdf(Number(localOrder.id));
+                });
+              }}
+              className="w-full mb-3 text-sm font-bold text-white bg-orange-600 py-3 rounded-xl shadow-md hover:bg-orange-700 transition flex items-center justify-center"
+            >
+              Download GST Invoice PDF
+            </button>
+            <button 
+              onClick={onClose}
+              className="w-full text-sm font-bold text-stone-600 bg-stone-100 py-3 rounded-xl hover:bg-stone-200 transition"
+            >
+              Close
+            </button>
           </div>
         )}
       </div>

@@ -19,8 +19,8 @@ export default function CustomerLayout() {
                     <button className="p-2 text-stone-500 hover:bg-stone-50 rounded-full transition-colors">
                         <Bell size={20} />
                     </button>
-                    
-                    <div 
+
+                    <div
                         onClick={() => navigate('/cart')}
                         className="flex h-10 w-10 items-center justify-center rounded-xl bg-orange-50 text-orange-600 relative cursor-pointer active:scale-95 transition-all"
                     >
@@ -33,15 +33,15 @@ export default function CustomerLayout() {
                     </div>
                 </div>
             </header>
-            
+
             <main className="flex-1 pb-20 p-4">
-                 <Outlet />
+                <Outlet />
             </main>
-            
+
             <div className="fixed bottom-0 left-0 right-0 border-t bg-white p-4 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]">
-               <button className="w-full flex justify-center items-center gap-2 rounded-xl bg-stone-900 py-3 text-white font-medium hover:bg-stone-800 transition-colors">
-                  Call Waiter
-               </button>
+                <button className="w-full flex justify-center items-center gap-2 rounded-xl bg-stone-900 py-3 text-white font-medium hover:bg-stone-800 transition-colors">
+                    Call Waiter
+                </button>
             </div>
         </div>
     );

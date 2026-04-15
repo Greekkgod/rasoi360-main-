@@ -15,6 +15,7 @@ class User(Base):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True, index=True)
     full_name = Column(String(100))
+    email = Column(String(100), unique=True, index=True, nullable=True)
     phone_number = Column(String(15), unique=True, index=True)
     password_hash = Column(String(255))
     role_id = Column(Integer, ForeignKey("roles.id"))
@@ -38,6 +39,7 @@ class MenuItem(Base):
     name = Column(String(100), index=True)
     price = Column(Float)
     cost_price = Column(Float, default=0.0)  # Cost to make the dish
+    tax_slab = Column(Float, default=5.0)    # GST %
     is_veg = Column(Boolean, default=True)
     is_available = Column(Boolean, default=True)
     image_url = Column(String(255), nullable=True)
@@ -65,10 +67,13 @@ class Order(Base):
     __tablename__ = "orders"
     id = Column(Integer, primary_key=True, index=True)
     table_id = Column(Integer, ForeignKey("restaurant_tables.id"))
-    user_id = Column(Integer, ForeignKey("users.id"))
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     status = Column(String(50), default="draft")
     total_amount = Column(Float, default=0.0)
     tax_amount = Column(Float, default=0.0)
+    discount_amount = Column(Float, default=0.0)
+    discount_type = Column(String(50), nullable=True)  # 'flat' or 'percentage'
+    final_total = Column(Float, default=0.0)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     source = Column(String(50), default="dine_in")  # dine_in, zomato, swiggy
     external_order_id = Column(String(100), nullable=True)  # Zomato/Swiggy order ID
@@ -112,6 +117,21 @@ class Payment(Base):
     status = Column(String(50), default="Pending")
     
     order = relationship("Order", back_populates="payments")
+
+class Invoice(Base):
+    __tablename__ = "invoices"
+    id = Column(Integer, primary_key=True, index=True)
+    invoice_number = Column(String(50), unique=True, index=True)
+    order_id = Column(Integer, ForeignKey("orders.id"))
+    gstin = Column(String(50), nullable=True)
+    cgst = Column(Float, default=0.0)
+    sgst = Column(Float, default=0.0)
+    igst = Column(Float, default=0.0)
+    discount_applied = Column(Float, default=0.0)
+    total_amount = Column(Float, default=0.0)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    
+    order = relationship("Order")
 
 # --- NEW: Inventory Management ---
 class InventoryItem(Base):

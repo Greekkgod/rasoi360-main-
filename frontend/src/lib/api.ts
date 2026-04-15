@@ -5,6 +5,101 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 });
 
+// ── Request interceptor: attach access token ─────────────────────────
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('access_token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+// ── Response interceptor: silent refresh on 401 ──────────────────────
+let isRefreshing = false;
+let failedQueue: Array<{
+  resolve: (token: string) => void;
+  reject: (error: unknown) => void;
+}> = [];
+
+function processQueue(error: unknown, token: string | null) {
+  failedQueue.forEach((prom) => {
+    if (error) {
+      prom.reject(error);
+    } else {
+      prom.resolve(token!);
+    }
+  });
+  failedQueue = [];
+}
+
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const originalRequest = error.config;
+
+    // Only attempt refresh on 401, and not on auth endpoints themselves
+    if (
+      error.response?.status === 401 &&
+      !originalRequest._retry &&
+      !originalRequest.url?.includes('/auth/')
+    ) {
+      if (isRefreshing) {
+        // Queue this request until the refresh completes
+        return new Promise((resolve, reject) => {
+          failedQueue.push({
+            resolve: (token: string) => {
+              originalRequest.headers.Authorization = `Bearer ${token}`;
+              resolve(api(originalRequest));
+            },
+            reject: (err: unknown) => {
+              reject(err);
+            },
+          });
+        });
+      }
+
+      originalRequest._retry = true;
+      isRefreshing = true;
+
+      const refreshToken = localStorage.getItem('refresh_token');
+      if (!refreshToken) {
+        isRefreshing = false;
+        processQueue(error, null);
+        localStorage.removeItem('access_token');
+        localStorage.removeItem('refresh_token');
+        if (window.location.pathname !== '/login' && window.location.pathname !== '/') {
+          window.location.href = '/login';
+        }
+        return Promise.reject(error);
+      }
+
+      try {
+        const { data } = await axios.post('http://localhost:8000/auth/refresh', {
+          refresh_token: refreshToken,
+        });
+        const newToken = data.access_token;
+        localStorage.setItem('access_token', newToken);
+
+        processQueue(null, newToken);
+        originalRequest.headers.Authorization = `Bearer ${newToken}`;
+        return api(originalRequest);
+      } catch (refreshError) {
+        processQueue(refreshError, null);
+        localStorage.removeItem('access_token');
+        localStorage.removeItem('refresh_token');
+        if (window.location.pathname !== '/login' && window.location.pathname !== '/') {
+          window.location.href = '/login';
+        }
+        return Promise.reject(refreshError);
+      } finally {
+        isRefreshing = false;
+      }
+    }
+
+    return Promise.reject(error);
+  }
+);
+
 // --- Types ---
 export interface MenuItem {
   id: number;
@@ -49,10 +144,13 @@ export interface KOT {
 export interface Order {
   id: number;
   table_id: number;
-  user_id: number;
+  user_id: number | null;
   status: string;
   total_amount: number;
   tax_amount: number;
+  discount_amount: number;
+  discount_type: string | null;
+  final_total: number;
   kots?: KOT[];
 }
 
@@ -66,6 +164,19 @@ export interface DashboardStats {
   preparing_kots: number;
   ready_kots: number;
 }
+
+// --- Auth ---
+export const apiLogin = (identifier: string, password: string) =>
+  api.post('/auth/login', { identifier, password }).then(r => r.data);
+
+export const apiRefresh = (refreshToken: string) =>
+  api.post('/auth/refresh', { refresh_token: refreshToken }).then(r => r.data);
+
+export const apiLogout = (refreshToken: string) =>
+  api.post('/auth/logout', { refresh_token: refreshToken }).then(r => r.data);
+
+export const apiGetMe = () =>
+  api.get('/auth/me').then(r => r.data);
 
 // --- Menu ---
 export const fetchMenu = () => api.get<Category[]>('/menu/').then(r => r.data);
@@ -86,10 +197,13 @@ export const createTable = (data: { table_number: string }) =>
 // --- Orders ---
 export const fetchOrders = () => api.get<Order[]>('/orders/').then(r => r.data);
 export const fetchOrder = (id: number) => api.get<Order>(`/orders/${id}`).then(r => r.data);
-export const createOrder = (data: { table_id: number; user_id: number; items: { menu_item_id: number; quantity: number; special_instructions?: string }[] }) =>
+export const createOrder = (data: { table_id: number; user_id: number | null; items: { menu_item_id: number; quantity: number; special_instructions?: string }[] }) =>
   api.post('/orders/', data).then(r => r.data);
 export const updateOrderStatus = (id: number, status: string) =>
-  api.patch(`/orders/${id}/status`, { status }).then(r => r.data);
+  api.patch<Order>(`/orders/${id}/status`, { status }).then(r => r.data);
+
+export const applyOrderDiscount = (id: number, data: { discount_amount: number; discount_type: string }) =>
+  api.post<Order>(`/orders/${id}/discount`, data).then(r => r.data);
 
 // --- KOTs ---
 export const fetchActiveKots = () => api.get<KOT[]>('/kots/').then(r => r.data);
@@ -110,5 +224,17 @@ export interface Payment {
 
 export const createPayment = (data: { order_id: number; amount: number; method: string }) =>
   api.post<Payment>('/payments/', data).then(r => r.data);
+
+export const downloadOrderInvoicePdf = (orderId: number) => 
+  api.get(`/invoices/order/${orderId}/pdf`, { responseType: 'blob' })
+    .then(r => {
+      const url = window.URL.createObjectURL(new Blob([r.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `invoice_order_${orderId}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode?.removeChild(link);
+    });
 
 export default api;
