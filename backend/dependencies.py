@@ -18,8 +18,10 @@ from typing import Optional
 from database import get_db
 import models
 
+import os
+
 # Must match the values in routers/auth.py
-SECRET_KEY = "rasoi360_access_secret_key_v2"
+SECRET_KEY = os.getenv("SECRET_KEY", "rasoi360_access_secret_key_v2")
 ALGORITHM = "HS256"
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login", auto_error=True)
@@ -48,12 +50,31 @@ async def get_current_user(
     result = await db.execute(
         select(models.User)
         .where(models.User.id == user_id)
-        .options(selectinload(models.User.role))
+        .options(selectinload(models.User.role), selectinload(models.User.restaurant))
     )
     user = result.scalar_one_or_none()
     if user is None:
         raise credentials_exception
     return user
+
+async def get_current_restaurant(
+    current_user: models.User = Depends(get_current_user),
+) -> models.Restaurant:
+    """Ensures the user belongs to a restaurant and the restaurant is active/trialing."""
+    if not current_user.restaurant:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User is not associated with any restaurant",
+        )
+    
+    # Check subscription status
+    if current_user.restaurant.subscription_status == "expired":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Restaurant subscription or trial has expired",
+        )
+        
+    return current_user.restaurant
 
 
 async def get_optional_user(
@@ -102,6 +123,18 @@ def require_role(*allowed_roles: str):
             )
         return current_user
     return _role_checker
+
+
+async def require_superuser(
+    current_user: models.User = Depends(get_current_user),
+) -> models.User:
+    """Ensures the user is a platform superuser."""
+    if not current_user.is_superuser:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied. Superuser privileges required.",
+        )
+    return current_user
 
 
 # Convenient shorthands

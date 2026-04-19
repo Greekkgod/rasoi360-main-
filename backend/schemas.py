@@ -179,6 +179,8 @@ class UserOut(BaseModel):
     email: Optional[str] = None
     phone_number: str
     role: str
+    is_superuser: bool = False
+    restaurant_id: Optional[int] = None
     model_config = ConfigDict(from_attributes=True)
 
 class TokenResponse(BaseModel):

@@ -18,12 +18,14 @@ from dependencies import get_current_user
 from redis_client import redis_client
 import models, schemas
 
+import os
+
 # ── Secrets & Config ──────────────────────────────────────────────────
-ACCESS_SECRET_KEY = "rasoi360_access_secret_key_v2"
-REFRESH_SECRET_KEY = "rasoi360_refresh_secret_key_v2"
+ACCESS_SECRET_KEY = os.getenv("SECRET_KEY", "rasoi360_access_secret_key_v2")
+REFRESH_SECRET_KEY = os.getenv("REFRESH_TOKEN_SECRET", "rasoi360_refresh_secret_key_v2")
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
-REFRESH_TOKEN_EXPIRE_DAYS = 7
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 30))
+REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", 7))
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
@@ -37,11 +39,12 @@ def get_password_hash(password: str) -> str:
     return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
 
-def create_access_token(user_id: int, role: str) -> str:
+def create_access_token(user_id: int, role: str, is_superuser: bool = False) -> str:
     expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     payload = {
         "user_id": user_id,
         "role": role,
+        "is_superuser": is_superuser,
         "type": "access",
         "exp": expire,
     }
@@ -86,7 +89,7 @@ async def login(body: schemas.LoginRequest, db: AsyncSession = Depends(get_db)):
 
     role_name = user.role.name if user.role else "unknown"
 
-    access_token = create_access_token(user.id, role_name)
+    access_token = create_access_token(user.id, role_name, user.is_superuser)
     refresh_token = create_refresh_token(user.id)
 
     return {
@@ -99,6 +102,8 @@ async def login(body: schemas.LoginRequest, db: AsyncSession = Depends(get_db)):
             "email": user.email,
             "phone_number": user.phone_number,
             "role": role_name,
+            "is_superuser": user.is_superuser,
+            "restaurant_id": user.restaurant_id,
         },
     }
 

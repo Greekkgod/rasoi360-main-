@@ -5,6 +5,8 @@ interface User {
     id: number;
     name: string;
     role: 'Admin' | 'Waiter' | 'Chef' | 'Cashier' | 'Customer';
+    restaurant_id?: number;
+    is_superuser: boolean;
 }
 
 interface AuthState {
@@ -82,6 +84,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
                 id: userData.id,
                 name: userData.full_name,
                 role: mapRoleName(userData.role),
+                restaurant_id: userData.restaurant_id,
+                is_superuser: userData.is_superuser,
             },
             isAuthenticated: true,
         });
@@ -133,6 +137,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
                     id: userData.id,
                     name: userData.full_name,
                     role: mapRoleName(userData.role),
+                    restaurant_id: userData.restaurant_id,
+                    is_superuser: userData.is_superuser,
                 },
                 isAuthenticated: true,
                 isHydrating: false,
@@ -151,6 +157,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
                             id: userData.id,
                             name: userData.full_name,
                             role: mapRoleName(userData.role),
+                            restaurant_id: userData.restaurant_id,
+                            is_superuser: userData.is_superuser,
                         },
                         isAuthenticated: true,
                         isHydrating: false,

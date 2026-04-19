@@ -1,82 +1,114 @@
 import asyncio
 import bcrypt
+import datetime
 from database import engine, async_session_maker
-from models import Base, Category, MenuItem, RestaurantTable, Role, User
+from models import Base, Category, MenuItem, RestaurantTable, Role, User, Restaurant, KitchenStation
 
 def get_password_hash(password: str) -> str:
     return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
-async def seed():
-    # create tables
+async def create_trial_restaurant(session, name, slug, admin_email, admin_phone):
+    # 1. Create Restaurant
+    trial_days = 14
+    restaurant = Restaurant(
+        name=name,
+        slug=slug,
+        subscription_status="trial",
+        trial_ends_at=datetime.datetime.utcnow() + datetime.timedelta(days=trial_days)
+    )
+    session.add(restaurant)
+    await session.flush()
+
+    # 2. Get Roles
+    from sqlalchemy import select
+    res = await session.execute(select(Role).where(Role.name == "admin"))
+    admin_role = res.scalar_one()
+    res = await session.execute(select(Role).where(Role.name == "waiter"))
+    waiter_role = res.scalar_one()
+    res = await session.execute(select(Role).where(Role.name == "chef"))
+    chef_role = res.scalar_one()
+
+    # 3. Create Admin User for this restaurant
+    admin_user = User(
+        restaurant_id=restaurant.id,
+        full_name=f"{name} Admin",
+        email=admin_email,
+        phone_number=admin_phone,
+        password_hash=get_password_hash("password123"),
+        role_id=admin_role.id
+    )
+    session.add(admin_user)
+
+    # 4. Create Kitchen Stations
+    pantry = KitchenStation(name="Pantry", restaurant_id=restaurant.id)
+    main_kitchen = KitchenStation(name="Main Kitchen", restaurant_id=restaurant.id)
+    session.add_all([pantry, main_kitchen])
+    await session.flush()
+
+    # 5. Add Sample Menu
+    c_starters = Category(name="Starters", restaurant_id=restaurant.id)
+    c_mains = Category(name="Main Course", restaurant_id=restaurant.id)
+    session.add_all([c_starters, c_mains])
+    await session.flush()
+
+    session.add_all([
+        MenuItem(name="Spring Rolls", price=180.0, category_id=c_starters.id, restaurant_id=restaurant.id, station_id=pantry.id),
+        MenuItem(name="Veg Manchurian", price=220.0, category_id=c_starters.id, restaurant_id=restaurant.id, station_id=main_kitchen.id),
+        MenuItem(name="Paneer Butter Masala", price=320.0, category_id=c_mains.id, restaurant_id=restaurant.id, station_id=main_kitchen.id),
+    ])
+
+    # 6. Add Tables
+    session.add_all([
+        RestaurantTable(table_number="T1", restaurant_id=restaurant.id),
+        RestaurantTable(table_number="T2", restaurant_id=restaurant.id),
+        RestaurantTable(table_number="T3", restaurant_id=restaurant.id),
+    ])
+    
+    print(f"✅ Created trial restaurant: {name} (Slug: {slug})")
+    print(f"📧 Admin: {admin_email} / password123")
+    print(f"⏳ Trial ends in {trial_days} days.")
+
+async def setup_base_system():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
     
     async with async_session_maker() as session:
-        # Add roles
+        # Global Roles
         admin_role = Role(name="admin")
         waiter_role = Role(name="waiter")
         chef_role = Role(name="chef")
-        session.add_all([admin_role, waiter_role, chef_role])
-        await session.flush()
-        
-        # Add users with emails
-        admin_hash = get_password_hash("admin123")
-        waiter_hash = get_password_hash("waiter123")
-        chef_hash = get_password_hash("chef123")
-
-        session.add(User(
-            full_name="Admin",
-            email="admin@rasoi360.com",
-            phone_number="1234567890",
-            password_hash=admin_hash,
-            role_id=admin_role.id,
-        ))
-        session.add(User(
-            full_name="Waiter 1",
-            email="waiter@rasoi360.com",
-            phone_number="9876543210",
-            password_hash=waiter_hash,
-            role_id=waiter_role.id,
-        ))
-        session.add(User(
-            full_name="Chef Gordon",
-            email="chef@rasoi360.com",
-            phone_number="5555555555",
-            password_hash=chef_hash,
-            role_id=chef_role.id,
-        ))
-        
-        # Add tables
-        session.add_all([
-            RestaurantTable(table_number="T1", status="Available"),
-            RestaurantTable(table_number="T2", status="Occupied"),
-            RestaurantTable(table_number="T3", status="Available")
-        ])
-        
-        # Add Categories
-        c_starters = Category(name="Starters")
-        c_mains = Category(name="Main Course")
-        c_drinks = Category(name="Beverages")
-        session.add_all([c_starters, c_mains, c_drinks])
-        await session.flush()
-        
-        # Add Menu Items
-        session.add_all([
-            MenuItem(name="Paneer Tikka", price=250.0, tax_slab=5.0, is_veg=True, category_id=c_starters.id),
-            MenuItem(name="Chicken Kebab", price=320.0, tax_slab=12.0, is_veg=False, category_id=c_starters.id),
-            MenuItem(name="Dal Makhani", price=280.0, tax_slab=5.0, is_veg=True, category_id=c_mains.id),
-            MenuItem(name="Butter Chicken", price=450.0, tax_slab=12.0, is_veg=False, category_id=c_mains.id),
-            MenuItem(name="Masala Chai", price=50.0, tax_slab=5.0, is_veg=True, category_id=c_drinks.id),
-            MenuItem(name="Fresh Lime Soda", price=90.0, tax_slab=18.0, is_veg=True, category_id=c_drinks.id)
-        ])
-        
+        cashier_role = Role(name="cashier")
+        session.add_all([admin_role, waiter_role, chef_role, cashier_role])
         await session.commit()
-    print("Database seeded completely!")
-    print("Users created:")
-    print("  admin@rasoi360.com / admin123  (role: admin)")
-    print("  waiter@rasoi360.com / waiter123 (role: waiter)")
-    print("  chef@rasoi360.com / chef123     (role: chef)")
+    print("🚀 Base system roles established.")
+
+async def main():
+    await setup_base_system()
+    
+    async with async_session_maker() as session:
+        # 1. Create Platform Superuser (YOU)
+        from sqlalchemy import select
+        res = await session.execute(select(Role).where(Role.name == "admin"))
+        admin_role = res.scalar_one()
+
+        superuser = User(
+            full_name="Rasoi360 Owner",
+            email="owner@rasoi360.com",
+            phone_number="0000000000",
+            password_hash=get_password_hash("master123"),
+            role_id=admin_role.id,
+            is_superuser=True
+        )
+        session.add(superuser)
+        
+        # 2. Create trial restaurants
+        await create_trial_restaurant(session, "The Gourmet Hub", "gourmet", "admin@gourmet.com", "9000000001")
+        await create_trial_restaurant(session, "Spice Route", "spice", "admin@spice.com", "9000000002")
+        await session.commit()
+    
+    print("\n✨ SaaS Trial Seed Completed!")
+    print("🔑 Superuser: owner@rasoi360.com / master123")
 
 if __name__ == "__main__":
-    asyncio.run(seed())
+    asyncio.run(main())

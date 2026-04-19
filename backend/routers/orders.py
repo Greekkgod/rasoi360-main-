@@ -6,19 +6,27 @@ import datetime
 import schemas, crud
 from database import get_db
 from ws_manager import kds_manager
-from dependencies import require_staff, get_optional_user
-import models
+from dependencies import require_staff, get_optional_user, get_current_restaurant
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
 
 @router.get("/", response_model=List[schemas.OrderDetailOut])
-async def list_orders(db: AsyncSession = Depends(get_db), current_user: models.User = Depends(require_staff)):
-    orders = await crud.get_all_orders(db)
+async def list_orders(
+    db: AsyncSession = Depends(get_db), 
+    current_user: models.User = Depends(require_staff),
+    restaurant: models.Restaurant = Depends(get_current_restaurant)
+):
+    orders = await crud.get_all_orders(db, restaurant.id)
     return orders
 
 @router.get("/{order_id}", response_model=schemas.OrderDetailOut)
-async def get_order(order_id: int, db: AsyncSession = Depends(get_db), current_user: models.User = Depends(require_staff)):
-    order = await crud.get_order_by_id(db, order_id)
+async def get_order(
+    order_id: int, 
+    db: AsyncSession = Depends(get_db), 
+    current_user: models.User = Depends(require_staff),
+    restaurant: models.Restaurant = Depends(get_current_restaurant)
+):
+    order = await crud.get_order_by_id(db, order_id, restaurant.id)
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
     return order
@@ -30,14 +38,31 @@ async def create_order(
     current_user: Optional[models.User] = Depends(get_optional_user),
 ):
     """Create an order. Accessible by both authenticated staff and unauthenticated customers."""
-    # If authenticated staff is creating the order, auto-fill user_id
-    if current_user and order_in.user_id is None:
-        order_in.user_id = current_user.id
-
-    db_order, kots = await crud.create_order_with_routing(db, order_in)
+    # For SaaS, we need to know WHICH restaurant this customer is at.
+    # In a real SaaS, this would come from a subdomain or a specific header.
+    # For now, we'll assume the restaurant_id is passed in the request or derived from the user.
     
-    # Broadcast to KDS via WebSocket
+    restaurant_id = None
+    if current_user:
+        if order_in.user_id is None:
+            order_in.user_id = current_user.id
+        restaurant_id = current_user.restaurant_id
+    else:
+        # If unauthenticated customer, they MUST provide which restaurant they are at (via table info)
+        # We'll look up the table to find the restaurant_id
+        from sqlalchemy.future import select
+        stmt = select(models.RestaurantTable).where(models.RestaurantTable.id == order_in.table_id)
+        result = await db.execute(stmt)
+        table = result.scalar_one_or_none()
+        if not table:
+            raise HTTPException(status_code=400, detail="Invalid table ID")
+        restaurant_id = table.restaurant_id
+
+    db_order, kots = await crud.create_order_with_routing(db, order_in, restaurant_id)
+    
+    # Broadcast to KDS via WebSocket (scoped to restaurant)
     for kot in kots:
+        # ... (rest of the WebSocket logic remains similar but should be scoped by restaurant_id in ws_manager)
         # Reload KOT with items eagerly loaded
         from sqlalchemy.future import select
         from sqlalchemy.orm import selectinload
