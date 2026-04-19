@@ -162,6 +162,7 @@ async def login(body: schemas.LoginRequest, db: AsyncSession = Depends(get_db)):
             "role": role_name,
             "is_superuser": user.is_superuser,
             "restaurant_id": user.restaurant_id,
+            "restaurant_slug": user.restaurant.slug if user.restaurant else None,
         },
     }
 

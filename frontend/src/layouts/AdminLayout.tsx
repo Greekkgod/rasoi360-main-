@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Outlet, NavLink } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
-import { LayoutDashboard, Menu as MenuIcon, Users, X, Menu as Hamburger, LayoutGrid } from 'lucide-react';
+import { LayoutDashboard, Menu as MenuIcon, Users, X, Menu as Hamburger, LayoutGrid, QrCode } from 'lucide-react';
 
 export default function AdminLayout() {
     const { user, isAuthenticated } = useAuthStore();
@@ -47,6 +47,10 @@ export default function AdminLayout() {
                    <NavLink to="/admin/tables" className={navClass} onClick={() => setIsSidebarOpen(false)}>
                        <LayoutGrid size={18} />
                        Table Layout
+                   </NavLink>
+                   <NavLink to="/admin/qrcodes" className={navClass} onClick={() => setIsSidebarOpen(false)}>
+                       <QrCode size={18} />
+                       QR Codes
                    </NavLink>
                    <NavLink to="/admin/staff" className={navClass} onClick={() => setIsSidebarOpen(false)}>
                        <Users size={18} />

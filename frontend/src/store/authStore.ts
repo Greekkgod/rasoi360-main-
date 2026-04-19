@@ -85,6 +85,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
                 name: userData.full_name,
                 role: mapRoleName(userData.role),
                 restaurant_id: userData.restaurant_id,
+                restaurant_slug: userData.restaurant_slug,
                 is_superuser: userData.is_superuser,
             },
             isAuthenticated: true,

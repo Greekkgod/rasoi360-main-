@@ -183,6 +183,7 @@ class UserOut(BaseModel):
     role: str
     is_superuser: bool = False
     restaurant_id: Optional[int] = None
+    restaurant_slug: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
 class TokenResponse(BaseModel):

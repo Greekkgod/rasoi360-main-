@@ -223,6 +223,13 @@ export default function PlatformDashboard() {
                                                                     <XCircle size={14} /> Suspend
                                                                 </button>
                                                             )}
+                                                            <button 
+                                                                onClick={() => handleImpersonate(restaurant)}
+                                                                className="px-3 py-1.5 bg-orange-600 hover:bg-orange-500 text-white rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 shadow-lg shadow-orange-600/20 ml-2"
+                                                                title="Login as this restaurant"
+                                                            >
+                                                                <UserCircle2 size={14} /> Impersonate
+                                                            </button>
                                                         </>
                                                     )}
                                                 </div>

@@ -78,20 +78,32 @@ export default function DigitalMenu() {
 
     return (
         <div className="flex flex-col gap-6 max-w-lg mx-auto relative">
-            {/* Search Bar */}
-            <div className="relative w-full">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-400" size={20} />
-                <input 
-                    type="text" 
-                    placeholder="Search for dishes..." 
-                    className="w-full bg-white pl-12 pr-4 py-3.5 rounded-2xl border border-stone-200 shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 font-medium text-stone-700 transition-all placeholder:text-stone-400"
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                />
+            {/* Search & Filters */}
+            <div className="flex flex-col gap-4">
+                <div className="relative w-full">
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-stone-400" size={20} />
+                    <input 
+                        type="text" 
+                        placeholder="Search for dishes..." 
+                        className="w-full bg-white pl-12 pr-4 py-3.5 rounded-2xl border border-stone-200 shadow-sm focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-500 font-medium text-stone-700 transition-all placeholder:text-stone-400"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                </div>
+                
+                <label className="flex items-center gap-3 cursor-pointer self-end bg-white border border-stone-200 px-4 py-2 rounded-xl shadow-sm hover:bg-stone-50 transition-colors">
+                    <div className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${vegOnly ? 'bg-green-500' : 'bg-stone-200'}`}>
+                        <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${vegOnly ? 'translate-x-4.5' : 'translate-x-1'}`} />
+                    </div>
+                    <span className="text-sm font-bold text-stone-700 flex items-center gap-1.5">
+                        <div className="w-2.5 h-2.5 rounded-full bg-green-500"></div> Veg Only
+                    </span>
+                    <input type="checkbox" className="hidden" checked={vegOnly} onChange={() => setVegOnly(!vegOnly)} />
+                </label>
             </div>
 
-            {/* Categories Scroll */}
-            <div className="-mx-4 px-4 overflow-x-auto no-scrollbar pb-2">
+            {/* Categories Scroll (Sticky) */}
+            <div className="-mx-4 px-4 overflow-x-auto no-scrollbar pb-3 pt-1 sticky top-0 z-40 bg-stone-50/90 backdrop-blur-md">
                 <div className="flex gap-3">
                     {categoryNames.map(cat => (
                         <button 

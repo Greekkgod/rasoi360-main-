@@ -382,6 +382,7 @@ export default function AdminDashboard() {
   const [recentOrders, setRecentOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [paymentOrder, setPaymentOrder] = useState<Order | null>(null);
+  const navigate = useNavigate();
 
   const loadData = async () => {
     setLoading(true);
@@ -408,12 +409,11 @@ export default function AdminDashboard() {
   // --- Data Transformations ---
 
   const revenueData = recentOrders.length > 0
-    ? recentOrders.slice(0, 7).map((order) => ({
+    ? recentOrders.slice(0, 7).reverse().map((order) => ({
       name: `Order ${order.id}`,
       revenue: order.total_amount + order.tax_amount,
-      base: order.total_amount,
     }))
-    : [{ name: 'No data', revenue: 0, base: 0 }];
+    : [{ name: 'No data', revenue: 0 }];
 
   const kotData = stats
     ? [
@@ -426,6 +426,11 @@ export default function AdminDashboard() {
   const occupancyRate = stats?.total_tables
     ? Math.round((stats.active_tables / stats.total_tables) * 100)
     : 0;
+
+  // --- Setup Wizard Logic ---
+  const hasTables = stats && stats.total_tables > 0;
+  const hasOrders = stats && stats.total_orders > 0;
+  const setupProgress = (hasTables ? 50 : 0) + (hasOrders ? 50 : 0);
 
   // --- Render ---
 
@@ -454,6 +459,38 @@ export default function AdminDashboard() {
           </button>
         </div>
       </div>
+
+      {/* Setup Wizard (Only show if not 100% setup) */}
+      {setupProgress < 100 && (
+        <div className="bg-gradient-to-r from-stone-900 to-stone-800 p-6 rounded-2xl shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-6 relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-64 h-64 bg-orange-500/10 rounded-full blur-3xl"></div>
+            <div className="relative z-10 flex-1">
+                <h3 className="text-xl font-bold text-white mb-2">Welcome! Let's launch your restaurant.</h3>
+                <div className="flex items-center gap-4 mb-4">
+                    <div className="flex-1 h-2 bg-stone-700 rounded-full overflow-hidden">
+                        <div className="h-full bg-orange-500 transition-all duration-1000" style={{ width: `${setupProgress}%` }}></div>
+                    </div>
+                    <span className="text-sm font-bold text-orange-400">{setupProgress}%</span>
+                </div>
+                <div className="flex gap-4">
+                    <button 
+                        onClick={() => navigate('/admin/tables')}
+                        className={`flex items-center gap-2 text-sm font-bold px-4 py-2 rounded-xl transition-all ${hasTables ? 'bg-stone-800 text-stone-400' : 'bg-white text-stone-900 hover:bg-stone-100'}`}
+                    >
+                        {hasTables ? <CheckCircle2 size={16} className="text-emerald-500"/> : <div className="w-4 h-4 rounded-full border-2 border-stone-900"></div>}
+                        1. Setup Tables
+                    </button>
+                    <button 
+                        onClick={() => navigate('/admin/qrcodes')}
+                        className={`flex items-center gap-2 text-sm font-bold px-4 py-2 rounded-xl transition-all ${hasOrders ? 'bg-stone-800 text-stone-400' : (hasTables ? 'bg-orange-600 text-white hover:bg-orange-500 shadow-lg shadow-orange-600/20' : 'bg-stone-800 text-stone-500 cursor-not-allowed')}`}
+                    >
+                        {hasOrders ? <CheckCircle2 size={16} className="text-emerald-500"/> : <div className="w-4 h-4 rounded-full border-2 border-current opacity-50"></div>}
+                        2. Get First Order
+                    </button>
+                </div>
+            </div>
+        </div>
+      )}
 
       {/* Top Metrics Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -491,21 +528,26 @@ export default function AdminDashboard() {
         {/* Main Charts Area */}
         <div className="lg:col-span-3 flex flex-col gap-6 min-w-0">
 
-          {/* Revenue Bar Chart */}
+          {/* Revenue Area Chart */}
           <div className="bg-white p-4 lg:p-6 rounded-2xl shadow-sm border border-stone-100">
             <h3 className="text-lg lg:text-xl font-bold text-stone-800 mb-6 flex items-center gap-2">
-              <TrendingUp size={20} className="text-orange-500" /> Revenue by Order
+              <TrendingUp size={20} className="text-orange-500" /> Revenue Trend (Live)
             </h3>
             <div className="h-[250px] lg:h-[300px] w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={revenueData} margin={{ top: 5, right: 10, left: -20, bottom: 5 }}>
+                <AreaChart data={revenueData} margin={{ top: 5, right: 10, left: -20, bottom: 5 }}>
+                  <defs>
+                    <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#f97316" stopOpacity={0.3}/>
+                      <stop offset="95%" stopColor="#f97316" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f5f5f4" />
                   <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#78716c', fontSize: 12 }} />
                   <YAxis axisLine={false} tickLine={false} tick={{ fill: '#78716c', fontSize: 12 }} tickFormatter={(value) => `₹${value}`} />
                   <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
-                  <Bar dataKey="revenue" name="Total (incl. tax)" fill="#f97316" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="base" name="Base" fill="#fed7aa" radius={[4, 4, 0, 0]} />
-                </BarChart>
+                  <Area type="monotone" dataKey="revenue" stroke="#f97316" strokeWidth={3} fillOpacity={1} fill="url(#colorRevenue)" />
+                </AreaChart>
               </ResponsiveContainer>
             </div>
           </div>

@@ -186,6 +186,7 @@ export default function App() {
            <Route index element={<AdminDashboard />} />
            <Route path="menu" element={<MenuEditor />} />
            <Route path="tables" element={<TableManager />} />
+           <Route path="qrcodes" element={<QRGenerator />} />
            <Route path="staff" element={<StaffManager />} />
         </Route>
       </Routes>
