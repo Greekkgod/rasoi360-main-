@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Outlet, NavLink } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
-import { LayoutDashboard, Menu as MenuIcon, Users, X, Menu as Hamburger } from 'lucide-react';
+import { LayoutDashboard, Menu as MenuIcon, Users, X, Menu as Hamburger, LayoutGrid } from 'lucide-react';
 
 export default function AdminLayout() {
     const { user, isAuthenticated } = useAuthStore();
@@ -28,7 +28,7 @@ export default function AdminLayout() {
     return (
         <div className="flex h-screen w-screen bg-stone-100 text-stone-900 overflow-hidden">
             {/* Sidebar Desktop & Mobile Drawer */}
-            <aside className={`fixed inset-y-0 left-0 z-50 w-64 border-r bg-white flex flex-col transform transition-transform duration-300 lg:relative lg:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+            <aside className={`fixed inset-y-0 left-0 z-50 w-64 border-r bg-white flex flex-col transform transition-transform duration-300 lg:relative lg:translate-x-0 ${isSidebarOpen ? 'translate-x-0' : '-'-translate-x-full'}`}>
                 <div className="h-16 border-b flex items-center justify-between px-6">
                     <h2 className="text-lg font-bold text-orange-600">Rasoi360 Admin</h2>
                     <button onClick={() => setIsSidebarOpen(false)} className="lg:hidden p-2 text-stone-400 hover:text-stone-600">
@@ -43,6 +43,10 @@ export default function AdminLayout() {
                    <NavLink to="/admin/menu" className={navClass} onClick={() => setIsSidebarOpen(false)}>
                        <MenuIcon size={18} />
                        Menu Management
+                   </NavLink>
+                   <NavLink to="/admin/tables" className={navClass} onClick={() => setIsSidebarOpen(false)}>
+                       <LayoutGrid size={18} />
+                       Table Layout
                    </NavLink>
                    <NavLink to="/admin/staff" className={navClass} onClick={() => setIsSidebarOpen(false)}>
                        <Users size={18} />

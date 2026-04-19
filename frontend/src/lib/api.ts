@@ -109,9 +109,21 @@ export interface MenuItem {
   is_available: boolean;
   image_url: string | null;
   category_id: number;
+  station_id: number | null;
 }
 
-export interface Category {
+export interface KitchenStation {
+    id: number;
+    name: string;
+    is_active: boolean;
+}
+
+// ... rest of interfaces
+
+// --- Stations ---
+export const fetchStations = () => api.get<KitchenStation[]>('/kots/stations').then(r => r.data);
+export const createStation = (data: { name: string }) => api.post('/kots/stations', data).then(r => r.data);
+
   id: number;
   name: string;
   description: string | null;
@@ -177,6 +189,9 @@ export const apiLogout = (refreshToken: string) =>
 
 export const apiGetMe = () =>
   api.get('/auth/me').then(r => r.data);
+
+export const apiRegister = (data: { restaurant_name: string; admin_full_name: string; email: string; phone_number: string; password: string }) =>
+  api.post('/auth/register', data).then(r => r.data);
 
 // --- Menu ---
 export const fetchMenu = () => api.get<Category[]>('/menu/').then(r => r.data);

@@ -58,6 +58,13 @@ async def get_stations(db: AsyncSession, restaurant_id: int):
     result = await db.execute(stmt)
     return result.scalars().all()
 
+async def create_kitchen_station(db: AsyncSession, station: schemas.KitchenStationCreate, restaurant_id: int):
+    db_station = models.KitchenStation(**station.model_dump(), restaurant_id=restaurant_id)
+    db.add(db_station)
+    await db.commit()
+    await db.refresh(db_station)
+    return db_station
+
 async def get_station_loads(db: AsyncSession, restaurant_id: int):
     """Returns a dict mapping station_id to current item load (active items in KOTs)"""
     stmt = (

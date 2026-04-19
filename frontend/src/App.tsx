@@ -161,6 +161,7 @@ export default function App() {
         </Route>
         
         <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
 
         {/* --- SUPER ADMIN ONLY --- */}
         <Route path="/platform" element={<PlatformLayout />}>
@@ -184,6 +185,7 @@ export default function App() {
         <Route path="/admin" element={<AdminLayout />}>
            <Route index element={<AdminDashboard />} />
            <Route path="menu" element={<MenuEditor />} />
+           <Route path="tables" element={<TableManager />} />
            <Route path="staff" element={<StaffManager />} />
         </Route>
       </Routes>

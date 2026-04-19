@@ -27,10 +27,68 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", 30))
 REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", 7))
 
+from sqlalchemy import select
+import crud
+
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
+class RegisterRequest(BaseModel):
+    restaurant_name: str
+    admin_full_name: str
+    email: str
+    phone_number: str
+    password: str
 
-# ── Helpers ───────────────────────────────────────────────────────────
+@router.post("/register")
+async def register_restaurant(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
+    """Automated Onboarding: Create restaurant, admin user, and default setup."""
+    # 1. Check if email exists
+    stmt = select(models.User).where(models.User.email == body.email)
+    res = await db.execute(stmt)
+    if res.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail="Email already registered")
+        
+    # 2. Create Restaurant (14-day trial)
+    slug = body.restaurant_name.lower().replace(" ", "-")[:50]
+    # Simple duplicate slug check
+    slug_check = await db.execute(select(models.Restaurant).where(models.Restaurant.slug == slug))
+    if slug_check.scalar_one_or_none():
+        slug = f"{slug}-{str(datetime.now().timestamp())[-4:]}"
+
+    new_restaurant = models.Restaurant(
+        name=body.restaurant_name,
+        slug=slug,
+        subscription_status="trial",
+        trial_ends_at=datetime.now(timezone.utc) + timedelta(days=14)
+    )
+    db.add(new_restaurant)
+    await db.flush()
+
+    # 3. Create Admin Role & User
+    role_res = await db.execute(select(models.Role).where(models.Role.name == "admin"))
+    admin_role = role_res.scalar_one()
+
+    new_user = models.User(
+        restaurant_id=new_restaurant.id,
+        full_name=body.admin_full_name,
+        email=body.email,
+        phone_number=body.phone_number,
+        password_hash=get_password_hash(body.password),
+        role_id=admin_role.id
+    )
+    db.add(new_user)
+    
+    # 4. Bootstrap Default Setup
+    # Create one default Kitchen Station
+    default_station = models.KitchenStation(name="Main Kitchen", restaurant_id=new_restaurant.id)
+    db.add(default_station)
+    
+    # Create 5 default Tables
+    for i in range(1, 6):
+        db.add(models.RestaurantTable(table_number=f"T{i}", restaurant_id=new_restaurant.id))
+
+    await db.commit()
+    return {"message": "Restaurant registered successfully", "slug": slug}
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     return bcrypt.checkpw(plain_password.encode("utf-8"), hashed_password.encode("utf-8"))
 

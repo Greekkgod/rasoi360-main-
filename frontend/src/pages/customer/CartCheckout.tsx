@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, Receipt, CheckCircle2, Loader2, Plus, Minus, Trash2, AlertTriangle } from 'lucide-react';
+import { ChevronLeft, Receipt, CheckCircle2, Loader2, Plus, Minus, Trash2, AlertTriangle, Store } from 'lucide-react';
 import { useCartStore } from '@/store/cartStore';
 import { useAuthStore } from '@/store/authStore';
 import { createOrder } from '@/lib/api';
@@ -10,6 +10,7 @@ export default function CartCheckout() {
     const [isPlacing, setIsPlacing] = useState(false);
     const [orderSuccess, setOrderSuccess] = useState(false);
     const [instructions, setInstructions] = useState('');
+    const [paymentMode, setPaymentMode] = useState('counter');
 
     const { items, tableId, updateQty, removeItem, getTotal, getTax, getGrandTotal, clearCart } = useCartStore();
     const user = useAuthStore(state => state.user);
@@ -26,6 +27,7 @@ export default function CartCheckout() {
                     quantity: item.qty,
                     special_instructions: item.special_instructions || instructions || undefined,
                 })),
+                payment_mode: paymentMode,
             });
             setOrderSuccess(true);
             clearCart();
@@ -140,11 +142,33 @@ export default function CartCheckout() {
                         </div>
                     </div>
 
+                    {/* Payment Mode Selection */}
+                    <div className="bg-white rounded-3xl p-5 border border-stone-100 shadow-sm flex flex-col gap-3">
+                        <h3 className="font-bold text-stone-800 text-base">Payment Method</h3>
+                        <div 
+                            onClick={() => setPaymentMode('counter')}
+                            className={`flex items-center justify-between p-4 rounded-2xl border-2 transition-all cursor-pointer ${paymentMode === 'counter' ? 'border-orange-500 bg-orange-50/30' : 'border-stone-100 bg-stone-50'}`}
+                        >
+                            <div className="flex items-center gap-3">
+                                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${paymentMode === 'counter' ? 'bg-orange-600 text-white' : 'bg-stone-200 text-stone-500'}`}>
+                                    <Store size={20}/>
+                                </div>
+                                <div>
+                                    <p className="font-bold text-stone-800">Pay at Counter</p>
+                                    <p className="text-xs text-stone-500">Inform waiter or pay at the exit</p>
+                                </div>
+                            </div>
+                            <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${paymentMode === 'counter' ? 'border-orange-600' : 'border-stone-300'}`}>
+                                {paymentMode === 'counter' && <div className="w-3 h-3 bg-orange-600 rounded-full"></div>}
+                            </div>
+                        </div>
+                    </div>
+
                     <div className="mt-auto">
                         <button 
                             onClick={handlePlaceOrder}
-                            disabled={isPlacing || items.length === 0}
-                            className="w-full bg-stone-900 shadow-xl shadow-stone-900/20 py-4 rounded-2xl flex items-center justify-center gap-2 text-white font-bold text-lg active:scale-[0.98] disabled:opacity-50 disabled:scale-100 transition-all"
+                            disabled={isPlacing || items.length === 0 || !tableId}
+                            className="w-full bg-stone-900 shadow-xl shadow-stone-900/20 py-4 rounded-2xl flex items-center justify-center gap-2 text-white font-bold text-lg active:scale-[0.98] disabled:opacity-50 disabled:scale-100 transition-all mb-4"
                         >
                             {isPlacing ? (
                                 <>Processing... <Loader2 className="animate-spin" size={20}/></>
