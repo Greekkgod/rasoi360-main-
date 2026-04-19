@@ -107,6 +107,7 @@ class Order(Base):
     external_order_id = Column(String(100), nullable=True)
     customer_name = Column(String(100), nullable=True)
     customer_phone = Column(String(15), nullable=True)
+    payment_mode = Column(String(50), default="counter") # counter, upi, cash, etc.
     
     restaurant = relationship("Restaurant", back_populates="orders")
     table = relationship("RestaurantTable", back_populates="orders")

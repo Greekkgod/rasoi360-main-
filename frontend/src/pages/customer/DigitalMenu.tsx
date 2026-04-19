@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
 import { Search, Plus, Minus, ShoppingCart } from 'lucide-react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { fetchMenu, type Category, type MenuItem } from '@/lib/api';
+import { useNavigate, useSearchParams, useParams } from 'react-router-dom';
+import { fetchPublicMenu, type Category, type MenuItem } from '@/lib/api';
 import { useCartStore } from '@/store/cartStore';
 
 export default function DigitalMenu() {
     const navigate = useNavigate();
+    const { slug } = useParams();
     const [searchParams] = useSearchParams();
     const [categories, setCategories] = useState<Category[]>([]);
     const [activeTab, setActiveTab] = useState<string>('All');
@@ -15,7 +16,7 @@ export default function DigitalMenu() {
     const { items: cartItems, addItem, updateQty, removeItem, getItemCount, setTableId } = useCartStore();
     const cartCount = getItemCount();
 
-    // Capture table ID from QR code URL param (e.g. /?table=5)
+    // Capture table ID from QR code URL param (e.g. /gourmet?table=5)
     useEffect(() => {
         const tableParam = searchParams.get('table');
         if (tableParam) {
@@ -27,13 +28,17 @@ export default function DigitalMenu() {
     }, [searchParams, setTableId]);
 
     useEffect(() => {
-        fetchMenu()
-            .then(data => {
-                setCategories(data);
-                setLoading(false);
-            })
-            .catch(() => setLoading(false));
-    }, []);
+        if (slug) {
+            fetchPublicMenu(slug)
+                .then(data => {
+                    setCategories(data);
+                    setLoading(false);
+                })
+                .catch(() => setLoading(false));
+        } else {
+            setLoading(false);
+        }
+    }, [slug]);
 
     const allItems = categories.flatMap(c => c.menu_items.map(item => ({ ...item, categoryName: c.name })));
     const categoryNames = ['All', ...categories.map(c => c.name)];

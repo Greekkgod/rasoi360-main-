@@ -96,6 +96,7 @@ class OrderCreate(BaseModel):
     table_id: int
     user_id: Optional[int] = None  # Waiter ID (null for customer self-service)
     items: List[KOTItemCreate]
+    payment_mode: str = "counter"
 
 class OrderUpdateStatus(BaseModel):
     status: str
@@ -109,6 +110,7 @@ class OrderOut(BaseModel):
     table_id: int
     user_id: Optional[int] = None
     status: str
+    payment_mode: str
     total_amount: float
     tax_amount: float
     discount_amount: float = 0.0

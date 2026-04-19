@@ -155,6 +155,7 @@ async def create_order_with_routing(db: AsyncSession, order_in: schemas.OrderCre
         table_id=order_in.table_id,
         user_id=order_in.user_id,
         status="kitchen",
+        payment_mode=order_in.payment_mode,
         total_amount=round(total, 2),
         tax_amount=tax,
         final_total=final_total

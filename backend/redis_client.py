@@ -26,22 +26,22 @@ else:
             return True
 
     redis_client = MockRedis()
-async def get_menu_cache():
+async def get_menu_cache(restaurant_id: int):
     try:
-        data = await redis_client.get("rasoi360:menu")
+        data = await redis_client.get(f"rasoi360:menu:{restaurant_id}")
         return json.loads(data) if data else None
     except Exception as e:
         print(f"Redis get error: {e}")
         return None
 
-async def set_menu_cache(menu_data: list, expire: int = 3600):
+async def set_menu_cache(restaurant_id: int, menu_data: list, expire: int = 3600):
     try:
-        await redis_client.setex("rasoi360:menu", expire, json.dumps(menu_data))
+        await redis_client.setex(f"rasoi360:menu:{restaurant_id}", expire, json.dumps(menu_data))
     except Exception as e:
         print(f"Redis set error: {e}")
 
-async def invalidate_menu_cache():
+async def invalidate_menu_cache(restaurant_id: int):
     try:
-        await redis_client.delete("rasoi360:menu")
+        await redis_client.delete(f"rasoi360:menu:{restaurant_id}")
     except Exception as e:
         print(f"Redis invalidate error: {e}")

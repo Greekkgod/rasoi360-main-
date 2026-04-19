@@ -180,6 +180,7 @@ export const apiGetMe = () =>
 
 // --- Menu ---
 export const fetchMenu = () => api.get<Category[]>('/menu/').then(r => r.data);
+export const fetchPublicMenu = (slug: string) => api.get<Category[]>(`/menu/public/${slug}`).then(r => r.data);
 export const createCategory = (data: { name: string; description?: string }) =>
   api.post('/menu/categories', data).then(r => r.data);
 export const createMenuItem = (data: { name: string; price: number; is_veg: boolean; category_id: number }) =>
@@ -236,5 +237,19 @@ export const downloadOrderInvoicePdf = (orderId: number) =>
       link.click();
       link.parentNode?.removeChild(link);
     });
+
+// --- Platform Admin ---
+export interface PlatformRestaurant {
+  id: number;
+  name: string;
+  slug: string;
+  subscription_status: string;
+  trial_ends_at: string | null;
+  created_at: string;
+}
+
+export const fetchAllRestaurants = () => api.get<PlatformRestaurant[]>('/platform/restaurants').then(r => r.data);
+export const updateRestaurantStatus = (id: number, data: { subscription_status: string; extend_trial_days?: number }) => 
+  api.patch<PlatformRestaurant>(`/platform/restaurants/${id}/status`, data).then(r => r.data);
 
 export default api;
